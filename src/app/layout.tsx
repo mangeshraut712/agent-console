@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Agent Console",
-  description: "Next.js frontend for the Alchemyst AI June 2026 assignment",
+  title: "Agent Console — WebSocket agent debug UI",
+  description:
+    "Open-source UI for debugging AI agent backends: streaming, tool calls, trace timeline, context diffs, reconnect/RESUME.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

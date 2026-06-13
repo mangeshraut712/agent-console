@@ -736,3 +736,162 @@ h1 {
     max-height: none;
   }
 }
+
+/* ── Connection settings ───────────────────────────────── */
+
+.connectionSettings {
+  flex: 1;
+  min-width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connectionSettingsLabel {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.connectionSettingsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.connectionUrlInput {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-strong);
+}
+
+.connectionUrlInput:disabled {
+  opacity: 0.7;
+}
+
+.connectionUrlHint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #b45309;
+}
+
+.connectionIndicatorInline {
+  flex-shrink: 0;
+}
+
+/* ── Toolbar & prompts ─────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.toolbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbarBtn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.toolbarBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbarLink {
+  font-size: 0.88rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.quickPrompts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.quickPromptsLabel {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.quickPromptsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quickPromptChip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.quickPromptChip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.quickPromptChip:not(:disabled):hover {
+  background: rgba(15, 118, 110, 0.2);
+}
+
+/* ── Error banner ────────────────────────────────────────── */
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  color: #991b1b;
+  font-size: 0.92rem;
+}
+
+.errorBannerDismiss {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.15);
+  color: inherit;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.lede a {
+  color: var(--accent);
+  font-weight: 600;
+}

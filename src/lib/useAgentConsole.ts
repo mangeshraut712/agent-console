@@ -5,6 +5,7 @@ import { WebSocketManager } from "./websocketManager";
 import { ReorderBuffer } from "./reorderBuffer";
 import { createFlushScheduler } from "./flushScheduler";
 import { markToolAckSent, resetToolAckRegistry } from "./toolAckRegistry";
+import { getStoredWsUrl, setStoredWsUrl, isValidWsUrl, DEFAULT_WS_URL } from "./config";
 import type {
   ServerMessage,
   ConversationMessage,
@@ -13,8 +14,6 @@ import type {
   ToolCallWithResult,
   ConnectionStatus,
 } from "./types";
-
-const WS_URL = "ws://localhost:4747/ws";
 
 function traceIdForSeq(seq: number): string {
   return `evt_seq_${seq}`;
@@ -26,6 +25,8 @@ export type ConnectionState = {
 
 export interface AgentConsoleState {
   connection: ConnectionState;
+  wsUrl: string;
+  lastError: string | null;
   messages: ConversationMessage[];
   traceEvents: TraceEvent[];
   contextSnapshots: ContextSnapshotEntry[];
@@ -35,6 +36,10 @@ export interface AgentConsoleActions {
   sendMessage: (content: string) => void;
   connect: () => void;
   disconnect: () => void;
+  updateWsUrl: (url: string) => void;
+  dismissError: () => void;
+  clearSession: () => void;
+  exportTraceJson: () => string;
   highlightEvent: (eventId: string) => void;
   highlightedEventId: string | null;
   sendToolAck: (callId: string) => void;
@@ -42,6 +47,8 @@ export interface AgentConsoleActions {
 
 export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
+  const [wsUrl, setWsUrl] = useState(DEFAULT_WS_URL);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
   const [contextSnapshots, setContextSnapshots] = useState<ContextSnapshotEntry[]>([]);
@@ -238,7 +245,9 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
           processStreamEnd(msg);
           break;
         case "PING":
+          break;
         case "ERROR":
+          setLastError(`${msg.code}: ${msg.message}`);
           break;
       }
 
@@ -296,9 +305,16 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
   );
 
   const connect = useCallback(() => {
+    if (!isValidWsUrl(wsUrl)) {
+      setLastError("Invalid WebSocket URL — use ws:// or wss://");
+      return;
+    }
+
+    setLastError(null);
+    setStoredWsUrl(wsUrl);
     wsRef.current?.disconnect();
 
-    const ws = new WebSocketManager(WS_URL);
+    const ws = new WebSocketManager(wsUrl);
     wsRef.current = ws;
 
     ws.setHandler((event) => {
@@ -348,12 +364,45 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
           }
           break;
         case "error":
+          setLastError("WebSocket connection error — check URL and that the server is running");
           break;
       }
     });
 
     ws.connect();
-  }, [appendTraceEvent, clearResumeFallback, processMessage, scheduleFlush]);
+  }, [appendTraceEvent, clearResumeFallback, processMessage, scheduleFlush, wsUrl]);
+
+  const updateWsUrl = useCallback((url: string) => {
+    setWsUrl(url);
+  }, []);
+
+  const dismissError = useCallback(() => setLastError(null), []);
+
+  const clearSession = useCallback(() => {
+    messagesRef.current = [];
+    traceEventsRef.current = [];
+    contextSnapshotsRef.current = [];
+    currentStreamRef.current = null;
+    reorderBufRef.current.reset(1);
+    processedSeqRef.current = 0;
+    wsRef.current?.resetProcessedSeq();
+    resetToolAckRegistry();
+    flushSchedulerRef.current.flushNow();
+  }, []);
+
+  const exportTraceJson = useCallback(() => {
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        wsUrl,
+        events: traceEventsRef.current,
+        messages: messagesRef.current,
+        contextSnapshots: contextSnapshotsRef.current,
+      },
+      null,
+      2,
+    );
+  }, [wsUrl]);
 
   const disconnect = useCallback(() => {
     flushSchedulerRef.current.cancel();
@@ -368,6 +417,10 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
   }, []);
 
   useEffect(() => {
+    setWsUrl(getStoredWsUrl());
+  }, []);
+
+  useEffect(() => {
     return () => {
       clearResumeFallback();
       flushSchedulerRef.current.cancel();
@@ -377,12 +430,18 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
 
   return {
     connection: { status },
+    wsUrl,
+    lastError,
     messages,
     traceEvents,
     contextSnapshots,
     sendMessage,
     connect,
     disconnect,
+    updateWsUrl,
+    dismissError,
+    clearSession,
+    exportTraceJson,
     highlightEvent,
     highlightedEventId,
     sendToolAck,
