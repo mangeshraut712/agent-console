@@ -74,7 +74,10 @@ WS_URL=ws://your-server:8080/ws npm run verify:server
 - Trace export (JSON)
 - Clear session without disconnecting
 - Protocol error banner
-- 37+ unit tests · `npm run verify:server`
+- Multi-turn trace and context history (persists across messages)
+- Dark mode (`prefers-color-scheme`) and mobile sidebar tabs
+- Tool JSON copy buttons · reconnect/resume status banner
+- 41+ unit tests · CI runs `verify:server` against mock backend
 
 ## Scripts
 

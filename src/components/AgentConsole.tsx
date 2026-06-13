@@ -6,6 +6,7 @@ import { ChatPanel } from "./ChatPanel";
 import { TraceTimeline } from "./TraceTimeline";
 import { ContextInspector } from "./ContextInspector";
 import { QuickPrompts } from "./QuickPrompts";
+import { SidebarPanel } from "./SidebarPanel";
 
 export function AgentConsole() {
   const {
@@ -27,8 +28,9 @@ export function AgentConsole() {
     sendToolAck,
   } = useAgentConsole();
 
-  const isConnected =
-    connection.status === "connected" || connection.status === "resuming";
+  const { status } = connection;
+  const isConnected = status === "connected" || status === "resuming";
+  const showRecoveryBanner = status === "reconnecting" || status === "resuming";
 
   const handleExportTrace = () => {
     const json = exportTraceJson();
@@ -39,6 +41,16 @@ export function AgentConsole() {
     a.download = `agent-trace-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleClearSession = () => {
+    if (
+      window.confirm(
+        "Clear all messages, trace events, and context snapshots? Connection stays open.",
+      )
+    ) {
+      clearSession();
+    }
   };
 
   return (
@@ -57,13 +69,21 @@ export function AgentConsole() {
           </p>
         </div>
         <ConnectionSettings
-          status={connection.status}
+          status={status}
           wsUrl={wsUrl}
           onWsUrlChange={updateWsUrl}
           onConnect={connect}
           onDisconnect={disconnect}
         />
       </section>
+
+      {showRecoveryBanner && (
+        <div className="infoBanner" role="status" aria-live="polite">
+          {status === "reconnecting"
+            ? "Connection lost — reconnecting with exponential backoff. Your session state is preserved."
+            : "Resuming session — replaying events from last processed sequence…"}
+        </div>
+      )}
 
       {lastError && (
         <div className="errorBanner" role="alert">
@@ -80,7 +100,7 @@ export function AgentConsole() {
           <button
             type="button"
             className="toolbarBtn"
-            onClick={clearSession}
+            onClick={handleClearSession}
             disabled={messages.length === 0 && traceEvents.length === 0}
           >
             Clear session
@@ -111,17 +131,30 @@ export function AgentConsole() {
           onAckToolCall={sendToolAck}
           onHighlightEvent={highlightEvent}
           highlightedEventId={highlightedEventId}
-          connectionStatus={connection.status}
+          connectionStatus={status}
         />
 
         <aside className="sidebar">
-          <TraceTimeline
-            events={traceEvents}
-            onHighlightEvent={highlightEvent}
-            highlightedEventId={highlightedEventId}
-          />
-
-          <ContextInspector snapshots={contextSnapshots} />
+          <div className="sidebarDesktop">
+            <TraceTimeline
+              events={traceEvents}
+              onHighlightEvent={highlightEvent}
+              highlightedEventId={highlightedEventId}
+            />
+            <ContextInspector snapshots={contextSnapshots} />
+          </div>
+          <div className="sidebarMobile">
+            <SidebarPanel
+              trace={
+                <TraceTimeline
+                  events={traceEvents}
+                  onHighlightEvent={highlightEvent}
+                  highlightedEventId={highlightedEventId}
+                />
+              }
+              context={<ContextInspector snapshots={contextSnapshots} />}
+            />
+          </div>
         </aside>
       </section>
     </main>

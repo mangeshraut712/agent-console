@@ -33,7 +33,7 @@ export function ChatPanel({
   useEffect(() => {
     if (!highlightedEventId?.startsWith("evt_seq_")) return;
     const el = listRef.current?.querySelector(
-      `[data-trace-id="${highlightedEventId}"]`,
+      `[data-trace-id="${highlightedEventId}"], [data-result-trace-id="${highlightedEventId}"]`,
     );
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [highlightedEventId]);
@@ -57,7 +57,7 @@ export function ChatPanel({
         </span>
       </header>
 
-      <div className="messageList" ref={listRef}>
+      <div className="messageList" ref={listRef} role="log" aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="emptyState">
             <p>Connect to the agent server and send a message.</p>
@@ -135,12 +135,19 @@ function MessageBubble({
       {message.toolCalls.length > 0 && (
         <div className="toolCallStack">
           {message.toolCalls.map((tc) => (
-            <div key={tc.call_id} data-trace-id={tc.traceEventId}>
+            <div
+              key={tc.call_id}
+              data-trace-id={tc.traceEventId}
+              data-result-trace-id={tc.resultTraceEventId}
+            >
               <ToolCard
                 toolCall={tc}
                 onAck={onAckToolCall}
                 onHighlight={onHighlightEvent}
-                isHighlighted={highlightedEventId === tc.traceEventId}
+                isHighlighted={
+                  highlightedEventId === tc.traceEventId ||
+                  highlightedEventId === tc.resultTraceEventId
+                }
               />
             </div>
           ))}

@@ -175,7 +175,14 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
 
     if (msgIdx >= 0 && msgIdx < msgs.length) {
       const toolCalls = msgs[msgIdx]!.toolCalls.map((tc) =>
-        tc.call_id === msg.call_id ? { ...tc, result: msg.result } : tc,
+        tc.call_id === msg.call_id
+          ? {
+              ...tc,
+              result: msg.result,
+              acknowledged: true,
+              resultTraceEventId: traceIdForSeq(msg.seq),
+            }
+          : tc,
       );
       msgs[msgIdx] = { ...msgs[msgIdx]!, toolCalls };
     }
@@ -285,9 +292,6 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
       currentStreamRef.current = null;
       resetToolAckRegistry();
 
-      traceEventsRef.current = [];
-      contextSnapshotsRef.current = [];
-
       const userMsg: ConversationMessage = {
         id: `msg_user_${Date.now()}`,
         role: "user",
@@ -360,8 +364,16 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
             for (const orderedMsg of ordered) {
               processMessage(orderedMsg);
             }
+            if (event.message.type === "STREAM_END") {
+              for (const late of reorderBufRef.current.flush()) {
+                processMessage(late);
+              }
+            }
             scheduleFlush();
           }
+          break;
+        case "parse_error":
+          setLastError("Received malformed JSON from server — check backend message format");
           break;
         case "error":
           setLastError("WebSocket connection error — check URL and that the server is running");
@@ -394,7 +406,12 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
     return JSON.stringify(
       {
         exportedAt: new Date().toISOString(),
-        wsUrl,
+        connection: {
+          status,
+          wsUrl,
+          processedSeq: processedSeqRef.current,
+          reconnectAttempts: wsRef.current?.getReconnectAttempts() ?? 0,
+        },
         events: traceEventsRef.current,
         messages: messagesRef.current,
         contextSnapshots: contextSnapshotsRef.current,
@@ -402,7 +419,7 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
       null,
       2,
     );
-  }, [wsUrl]);
+  }, [status, wsUrl]);
 
   const disconnect = useCallback(() => {
     flushSchedulerRef.current.cancel();

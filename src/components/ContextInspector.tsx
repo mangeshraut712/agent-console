@@ -123,11 +123,13 @@ export function ContextInspector({
             {currentSnapshots.map((snap, idx) => (
               <button
                 key={snap.seq}
+                type="button"
                 className={`contextHistoryDot ${
                   idx === snapshotIndex ? "contextHistoryDotActive" : ""
                 }`}
                 onClick={() => setSnapshotIndex(idx)}
-                title={`Seq #${snap.seq}`}
+                aria-label={`Snapshot ${idx + 1} of ${currentSnapshots.length}, seq ${snap.seq}`}
+                aria-current={idx === snapshotIndex ? "true" : undefined}
               />
             ))}
           </div>

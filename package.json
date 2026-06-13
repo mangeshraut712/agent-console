@@ -1,6 +1,6 @@
 {
   "name": "agent-console",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Real-time Agent Console — WebSocket streaming, tool calls, trace timeline, chaos survival",
   "type": "module",
   "license": "MIT",

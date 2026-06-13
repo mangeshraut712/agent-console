@@ -57,9 +57,11 @@ export function ConnectionSettings({
           <span
             className="connectionDot"
             style={{ backgroundColor: STATUS_COLORS[status] }}
-            title={STATUS_LABELS[status]}
+            aria-hidden="true"
           />
-          <span className="connectionLabel">{STATUS_LABELS[status]}</span>
+          <span className="connectionLabel" aria-live="polite">
+            {STATUS_LABELS[status]}
+          </span>
         </div>
         {isLive ? (
           <button type="button" className="connectionBtn" onClick={onDisconnect}>

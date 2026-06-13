@@ -57,14 +57,27 @@ const TraceRow = forwardRef<
   ref,
 ) {
   const hasExpandableDetail = Boolean(detail && onToggleExpand);
+  const activate = () => {
+    if (hasExpandableDetail) onToggleExpand?.();
+    else onClick();
+  };
 
   return (
     <div
       ref={ref}
+      role="button"
+      tabIndex={0}
+      aria-label={`${type} event ${seq}: ${label}`}
       className={`traceRow ${isHighlighted ? "traceRowHighlighted" : ""} ${linked ? "traceRowLinked" : ""}`}
-      onClick={hasExpandableDetail ? onToggleExpand : onClick}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          activate();
+        }
+      }}
     >
-      <span className="traceEventDot" style={{ backgroundColor: color }}>
+      <span className="traceEventDot" style={{ backgroundColor: color }} aria-hidden="true">
         {icon}
       </span>
       <div className="traceEventBody">

@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { ServerMessage, ClientMessage, ConnectionStatus } from "./types";
+import { parseServerMessage } from "./parseMessage";
 
 export type WsEventType =
   | "connecting"
@@ -14,6 +15,7 @@ export type WsEventType =
   | "resuming"
   | "close"
   | "message"
+  | "parse_error"
   | "error"
   | "reconnecting"
   | "pong_sent";
@@ -102,6 +104,10 @@ export class WebSocketManager {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
+  getReconnectAttempts(): number {
+    return this.reconnectAttempts;
+  }
+
   sendResume(): void {
     if (this.processedSeq > 0) {
       this.status = "resuming";
@@ -153,15 +159,15 @@ export class WebSocketManager {
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data) as ServerMessage;
-        if (msg.type === "PING") {
-          this.handlePing(msg.challenge);
-        }
-        this.emit({ type: "message", message: msg });
-      } catch {
-        // Malformed message — ignore
+      const msg = parseServerMessage(String(event.data));
+      if (!msg) {
+        this.emit({ type: "parse_error" });
+        return;
       }
+      if (msg.type === "PING") {
+        this.handlePing(msg.challenge);
+      }
+      this.emit({ type: "message", message: msg });
     };
   }
 

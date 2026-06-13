@@ -118,8 +118,10 @@ export interface ToolCallWithResult {
   acknowledged: boolean;
   /** Server seq of the TOOL_CALL event — used for timeline linking */
   seq: number;
-  /** Stable trace row id for bidirectional highlight */
+  /** Stable trace row id for TOOL_CALL highlight */
   traceEventId: string;
+  /** Trace row id for TOOL_RESULT highlight */
+  resultTraceEventId?: string;
 }
 
 // ── Trace event for the timeline ──────────────────────────────
