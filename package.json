@@ -1,8 +1,18 @@
 {
   "name": "agent-console",
-  "private": true,
-  "version": "0.2.0",
+  "version": "1.0.0",
+  "description": "Real-time Agent Console — WebSocket streaming, tool calls, trace timeline, chaos survival",
   "type": "module",
+  "license": "MIT",
+  "author": "Mangesh Raut",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mangeshraut712/agent-console.git"
+  },
+  "homepage": "https://github.com/mangeshraut712/agent-console#readme",
+  "bugs": {
+    "url": "https://github.com/mangeshraut712/agent-console/issues"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
