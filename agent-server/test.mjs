@@ -1,7 +1,12 @@
 // Quick integration test for the agent server
 // Tests: connection, USER_MESSAGE, TOKEN streaming, TOOL_CALL/ACK/RESULT, PING/PONG, RESUME
 
+import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+
+const AGENT_SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 
 const PORT = 4748;
 const WS_URL = `ws://localhost:${PORT}/ws`;
@@ -369,15 +374,29 @@ async function testLargeContext() {
 async function main() {
   console.log("Starting agent-server integration tests...\n");
 
-  // Start the server
-  const { spawn } = await import("child_process");
-  const server = spawn("node", ["dist/index.js", "--port", String(PORT)], {
-    cwd: "/home/claude/fullstack-assignment/agent-server",
-    stdio: "pipe",
+  const server = spawn(
+    process.execPath,
+    [join(AGENT_SERVER_DIR, "dist/index.js"), "--port", String(PORT)],
+    {
+      cwd: AGENT_SERVER_DIR,
+      stdio: "pipe",
+    },
+  );
+
+  server.stderr?.on("data", (chunk) => {
+    process.stderr.write(chunk);
   });
 
   // Wait for server to be ready
-  await sleep(2000);
+  for (let i = 0; i < 30; i++) {
+    try {
+      const res = await fetch(`${HTTP_URL}/health`);
+      if (res.ok) break;
+    } catch {
+      // not ready yet
+    }
+    await sleep(500);
+  }
 
   try {
     await testNormalFlow();

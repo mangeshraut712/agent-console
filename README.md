@@ -20,6 +20,8 @@ Point it at **any server** that implements the [Agent Console protocol](docs/ADO
 
 ## Quick start
 
+**Requirements:** Node.js 20+ and npm 10+. Docker is optional but recommended for a zero-config demo.
+
 ### Option A — Docker (recommended for new users)
 
 ```bash
@@ -33,21 +35,32 @@ Open http://localhost:3000 → **Connect** → pick a quick prompt or type a mes
 ### Option B — Local dev
 
 ```bash
-npm install
+git clone https://github.com/mangeshraut712/agent-console.git
+cd agent-console
+npm run setup          # installs root + agent-server and builds the mock backend
 cp .env.example .env.local   # optional
 
 # Terminal 1
-cd agent-server && npm install && npm start
+cd agent-server && npm start
 
 # Terminal 2
 npm run dev
 ```
 
-Before Connect (single WS client only):
+Before Connect (only one WebSocket client at a time on the mock server):
 
 ```bash
 bash scripts/ensure-clean-ws.sh
 ```
+
+### Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Connect fails / stuck on connecting | Run `bash scripts/ensure-clean-ws.sh`, then retry |
+| Port 4747 already in use | Stop other agent-server processes or change port in `agent-server` |
+| `npm run verify:server` fails | Ensure agent-server is running: `curl http://localhost:4747/health` |
+| Docker stack won't start | Run `npm run stack:down` then `npm run stack` again |
 
 ## Configuration
 
@@ -83,6 +96,7 @@ WS_URL=ws://your-server:8080/ws npm run verify:server
 
 | Command | Description |
 |---------|-------------|
+| `npm run setup` | Install all deps + build agent-server (first-time setup) |
 | `npm run dev` | Dev server (Turbopack) |
 | `npm run stack` | Docker Compose — web + agent-server |
 | `npm test` | Unit tests |

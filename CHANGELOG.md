@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.1] — 2026-06-13
+
+### Fixed
+- CI protocol job: `agent-server/test.mjs` no longer uses a hardcoded assignment path
+- Agent-server tests wait for `/health` before running
+
+### Added
+- `npm run setup` — one command to install root + agent-server and build the mock backend
+- README troubleshooting table for common first-run issues
+- `public/` directory for Docker standalone builds
+
 ## [1.2.0] — 2026-06-13
 
 ### Added

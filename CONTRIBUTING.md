@@ -7,10 +7,10 @@ Thanks for improving Agent Console! This project is meant to be a **reusable deb
 ```bash
 git clone https://github.com/mangeshraut712/agent-console.git
 cd agent-console
-npm install
+npm run setup
 
 # Terminal 1 — mock agent
-cd agent-server && npm install && npm start
+cd agent-server && npm start
 
 # Terminal 2 — frontend
 npm run dev

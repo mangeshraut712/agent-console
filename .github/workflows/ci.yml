@@ -16,8 +16,13 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            agent-server/package-lock.json
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm run setup
+
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
@@ -31,10 +36,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            agent-server/package-lock.json
 
-      - name: Install agent-server
-        working-directory: agent-server
-        run: npm ci && npm run build
+      - name: Install dependencies
+        run: npm run setup
 
       - name: Start agent-server
         working-directory: agent-server
@@ -46,14 +54,12 @@ jobs:
             curl -sf http://127.0.0.1:4747/health && exit 0
             sleep 1
           done
+          echo "agent-server did not become healthy in time"
           exit 1
-
-      - name: Install frontend
-        run: npm ci
 
       - name: Protocol verification
         run: npm run verify:server
 
-      - name: Agent-server tests
+      - name: Agent-server integration tests
         working-directory: agent-server
         run: node test.mjs
