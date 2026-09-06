@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/mangeshraut712/agent-console.git"
   },
-  "homepage": "https://github.com/mangeshraut712/agent-console#readme",
+    "homepage": "https://mangeshraut712.github.io/agent-console/",
   "bugs": {
     "url": "https://github.com/mangeshraut712/agent-console/issues"
   },
@@ -17,6 +17,7 @@
     "setup": "npm ci && npm ci --prefix agent-server && npm run build --prefix agent-server",
     "dev": "next dev --turbopack",
     "build": "next build",
+    "build:pages": "GITHUB_PAGES=true NEXT_PUBLIC_DEMO_MODE=true NEXT_PUBLIC_WS_URL=demo://agent next build",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",

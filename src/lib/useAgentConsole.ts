@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WebSocketManager } from "./websocketManager";
+import { DemoAgentManager } from "./demoAgent";
 import { ReorderBuffer } from "./reorderBuffer";
 import { createFlushScheduler } from "./flushScheduler";
 import { markToolAckSent, resetToolAckRegistry } from "./toolAckRegistry";
-import { getStoredWsUrl, setStoredWsUrl, isValidWsUrl, DEFAULT_WS_URL } from "./config";
+import {
+  getStoredWsUrl,
+  setStoredWsUrl,
+  isValidWsUrl,
+  isDemoEndpoint,
+  DEFAULT_WS_URL,
+} from "./config";
 import type {
   ServerMessage,
   ConversationMessage,
@@ -58,7 +65,7 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
   const traceEventsRef = useRef<TraceEvent[]>([]);
   const contextSnapshotsRef = useRef<ContextSnapshotEntry[]>([]);
 
-  const wsRef = useRef<WebSocketManager | null>(null);
+  const wsRef = useRef<WebSocketManager | DemoAgentManager | null>(null);
   const reorderBufRef = useRef<ReorderBuffer>(new ReorderBuffer());
   const processedSeqRef = useRef<number>(0);
   const isResumingRef = useRef(false);
@@ -256,6 +263,10 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
         case "ERROR":
           setLastError(`${msg.code}: ${msg.message}`);
           break;
+        default: {
+          const _exhaustive: never = msg;
+          return _exhaustive;
+        }
       }
 
       if (isResumingRef.current) {
@@ -318,7 +329,7 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
     setStoredWsUrl(wsUrl);
     wsRef.current?.disconnect();
 
-    const ws = new WebSocketManager(wsUrl);
+    const ws = isDemoEndpoint(wsUrl) ? new DemoAgentManager() : new WebSocketManager(wsUrl);
     wsRef.current = ws;
 
     ws.setHandler((event) => {

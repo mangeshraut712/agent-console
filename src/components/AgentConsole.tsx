@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoEndpoint } from "@/lib/config";
 import { useAgentConsole } from "@/lib/useAgentConsole";
 import { ConnectionSettings } from "./ConnectionSettings";
 import { ChatPanel } from "./ChatPanel";
@@ -76,6 +77,14 @@ export function AgentConsole() {
           onDisconnect={disconnect}
         />
       </section>
+
+      {isDemoEndpoint(wsUrl) && (
+        <div className="infoBanner" role="status">
+          GitHub Pages demo uses an in-browser mock agent (no live WebSocket server). Click{" "}
+          <strong>Connect</strong>, then try a prompt. For a real backend, run{" "}
+          <code>npm run stack</code> locally or set a <code>ws://</code> / <code>wss://</code> URL.
+        </div>
+      )}
 
       {showRecoveryBanner && (
         <div className="infoBanner" role="status" aria-live="polite">

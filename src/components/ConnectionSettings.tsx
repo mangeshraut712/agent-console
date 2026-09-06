@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConnectionStatus } from "@/lib/types";
-import { isValidWsUrl } from "@/lib/config";
+import { isDemoEndpoint, isValidWsUrl } from "@/lib/config";
 
 const STATUS_LABELS: Record<ConnectionStatus, string> = {
   disconnected: "Disconnected",
@@ -73,14 +73,22 @@ export function ConnectionSettings({
             className="connectionBtn connectionBtnConnect"
             onClick={onConnect}
             disabled={isTransient || !urlValid}
-            title={!urlValid ? "Enter a valid ws:// or wss:// URL" : undefined}
+            title={!urlValid ? "Enter a valid ws://, wss://, or demo:// URL" : undefined}
           >
             {isTransient ? "Connecting…" : "Connect"}
           </button>
         )}
       </div>
       {!urlValid && wsUrl.trim() !== "" && (
-        <p className="connectionUrlHint">Use a WebSocket URL starting with <code>ws://</code> or <code>wss://</code></p>
+        <p className="connectionUrlHint">
+          Use a WebSocket URL starting with <code>ws://</code> or <code>wss://</code>, or{" "}
+          <code>demo://agent</code> for the in-browser mock.
+        </p>
+      )}
+      {isDemoEndpoint(wsUrl) && (
+        <p className="connectionUrlHint">
+          In-browser mock agent — no backend required. Switch to <code>ws://</code> to connect a live server.
+        </p>
       )}
     </div>
   );

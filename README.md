@@ -1,22 +1,11 @@
 # Agent Console
 
+Real-time debug UI for AI agent backends over WebSocket — streaming tokens, tool calls, and a live protocol trace.
+
+**Live demo:** [https://mangeshraut712.github.io/agent-console/](https://mangeshraut712.github.io/agent-console/) (in-browser mock agent; GitHub Pages cannot host the WebSocket server)
+
 [![CI](https://github.com/mangeshraut712/agent-console/actions/workflows/ci.yml/badge.svg)](https://github.com/mangeshraut712/agent-console/actions/workflows/ci.yml)
-
-**Open-source debug UI** for AI agent backends over WebSocket — streaming tokens, tool calls, live protocol trace, context diffs, and reconnect/`RESUME` recovery.
-
-Point it at **any server** that implements the [Agent Console protocol](docs/ADOPTING.md), or use the bundled mock `agent-server`.
-
-**Stack:** Next.js 15 · React 19 · TypeScript · no Vercel AI SDK
-
-## Why use this?
-
-- **Debug agents visually** — see every `TOKEN`, `TOOL_CALL`, `PING`, and `CONTEXT_SNAPSHOT` in a timeline
-- **Plug in your backend** — configurable `ws://` / `wss://` URL (env + UI + localStorage)
-- **Production patterns** — seq reorder buffer, RAF-coalesced streaming, exponential backoff, `RESUME(last_seq)`
-- **Export traces** — download JSON for bug reports and regression analysis
-- **One-command demo** — `npm run stack` (Docker Compose)
-
-![Stream with tool call](docs/screenshot-stream-tool.png)
+[![Pages](https://github.com/mangeshraut712/agent-console/actions/workflows/pages.yml/badge.svg)](https://github.com/mangeshraut712/agent-console/actions/workflows/pages.yml)
 
 ## Quick start
 
@@ -62,11 +51,29 @@ bash scripts/ensure-clean-ws.sh
 | `npm run verify:server` fails | Ensure agent-server is running: `curl http://localhost:4747/health` |
 | Docker stack won't start | Run `npm run stack:down` then `npm run stack` again |
 
+## Why use this?
+
+- **Debug agents visually** — see every `TOKEN`, `TOOL_CALL`, `PING`, and `CONTEXT_SNAPSHOT` in a timeline
+- **Plug in your backend** — configurable `ws://` / `wss://` URL (env + UI + localStorage)
+- **Production patterns** — seq reorder buffer, RAF-coalesced streaming, exponential backoff, `RESUME(last_seq)`
+- **Export traces** — download JSON for bug reports and regression analysis
+- **One-command demo** — `npm run stack` (Docker Compose)
+
+![Stream with tool call](docs/screenshot-stream-tool.png)
+
+Point it at **any server** that implements the [Agent Console protocol](docs/ADOPTING.md), or use the bundled mock `agent-server`.
+
+**Stack:** Next.js 15 · React 19 · TypeScript · no Vercel AI SDK
+
+## GitHub Pages demo
+
+The [live demo](https://mangeshraut712.github.io/agent-console/) is a static export (`next export` via `output: "export"`). Connect to `demo://agent` to stream canned protocol events in the browser. For a real WebSocket backend, run the stack locally.
+
 ## Configuration
 
 | Method | Example |
 |--------|---------|
-| UI | Set **Agent WebSocket URL** in the header |
+| UI | Set **Agent WebSocket URL** in the header (`demo://agent` for the mock) |
 | Env | `NEXT_PUBLIC_WS_URL=wss://api.example.com/ws` |
 | Default | `ws://localhost:4747/ws` |
 
@@ -102,6 +109,7 @@ WS_URL=ws://your-server:8080/ws npm run verify:server
 | `npm test` | Unit tests |
 | `npm run verify:server` | Protocol compliance script |
 | `npm run verify:chaos` | Chaos-mode verification |
+| `npm run build:pages` | Static export for GitHub Pages (demo mode) |
 
 ## Project layout
 
