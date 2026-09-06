@@ -60,7 +60,7 @@ export function ChatPanel({
       <div className="messageList" ref={listRef} role="log" aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="emptyState">
-            <p>Connect to the agent server and send a message.</p>
+            <p>Connect (demo://agent or your ws:// server) and send a message.</p>
             <p className="muted">Try: &quot;Summarise the Q3 report&quot; or &quot;Analyze the data&quot;</p>
           </div>
         )}
