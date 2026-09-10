@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Captures README screenshots and chaos-mode screen recording.
- * Prerequisites: agent-server + frontend running on 4747 / 3000.
+ * Prerequisites: agent-server + frontend running on 4747 / 3000,
+ * or set APP_URL (e.g. the GitHub Pages demo).
  *
  * Usage:
  *   node scripts/capture-submission.mjs --mode screenshots
@@ -16,6 +17,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const DOCS = path.join(ROOT, "docs");
+const SCREENSHOTS = path.join(DOCS, "screenshots");
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 const MODE = process.argv.includes("--mode") ? process.argv[process.argv.indexOf("--mode") + 1] : "screenshots";
 
@@ -54,33 +56,37 @@ async function waitForStreamComplete(page, timeoutMs = 45_000) {
 }
 
 async function captureScreenshots() {
-  await mkdir(DOCS, { recursive: true });
+  await mkdir(SCREENSHOTS, { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
   try {
     await waitForApp(page);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS, "landing.png"),
+      fullPage: false,
+    });
+    console.log("✓ docs/screenshots/landing.png");
+
     await connectAndSend(page, "Summarise the Q3 report");
     await waitForStreamComplete(page, 60_000);
 
     await page.screenshot({
-      path: path.join(DOCS, "screenshot-stream-tool.png"),
+      path: path.join(SCREENSHOTS, "stream-tool-call.png"),
       fullPage: false,
     });
-    console.log("✓ docs/screenshot-stream-tool.png");
+    console.log("✓ docs/screenshots/stream-tool-call.png");
 
-    await page.screenshot({
-      path: path.join(DOCS, "screenshot-trace.png"),
-      clip: { x: 720, y: 120, width: 700, height: 700 },
+    await page.locator(".traceCard").first().screenshot({
+      path: path.join(SCREENSHOTS, "trace-timeline.png"),
     });
-    console.log("✓ docs/screenshot-trace.png");
+    console.log("✓ docs/screenshots/trace-timeline.png");
 
-    await page.screenshot({
-      path: path.join(DOCS, "screenshot-context-diff.png"),
-      clip: { x: 720, y: 520, width: 700, height: 380 },
+    await page.locator(".contextCard").first().screenshot({
+      path: path.join(SCREENSHOTS, "context-inspector.png"),
     });
-    console.log("✓ docs/screenshot-context-diff.png");
+    console.log("✓ docs/screenshots/context-inspector.png");
   } finally {
     await browser.close();
   }
