@@ -2,10 +2,16 @@
 
 Real-time debug UI for AI agent backends over WebSocket — streaming tokens, tool calls, and a live protocol trace.
 
-**Live demo:** [https://mangeshraut712.github.io/agent-console/](https://mangeshraut712.github.io/agent-console/) (in-browser mock agent; GitHub Pages cannot host the WebSocket server)
+**Live demo:** [https://mangeshraut712.github.io/agent-console/](https://mangeshraut712.github.io/agent-console/) — in-browser mock (`demo://agent`; GitHub Pages cannot host the WebSocket server)
 
 [![CI](https://github.com/mangeshraut712/agent-console/actions/workflows/ci.yml/badge.svg)](https://github.com/mangeshraut712/agent-console/actions/workflows/ci.yml)
 [![Pages](https://github.com/mangeshraut712/agent-console/actions/workflows/pages.yml/badge.svg)](https://github.com/mangeshraut712/agent-console/actions/workflows/pages.yml)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+[![Live demo: streaming tokens and a lookup_metric tool call](docs/screenshots/stream-tool-call.png)](https://mangeshraut712.github.io/agent-console/)
 
 ## Quick start
 
@@ -59,11 +65,19 @@ bash scripts/ensure-clean-ws.sh
 - **Export traces** — download JSON for bug reports and regression analysis
 - **One-command demo** — `npm run stack` (Docker Compose)
 
-![Stream with tool call](docs/screenshot-stream-tool.png)
-
 Point it at **any server** that implements the [Agent Console protocol](docs/ADOPTING.md), or use the bundled mock `agent-server`.
 
 **Stack:** Next.js 15 · React 19 · TypeScript · no Vercel AI SDK
+
+## Screenshots
+
+Captured from the [live GitHub Pages demo](https://mangeshraut712.github.io/agent-console/) (Sept 2026). Click **Connect**, then try a quick prompt.
+
+| Landing | Trace timeline | Context inspector |
+| --- | --- | --- |
+| [![Landing](docs/screenshots/landing.png)](https://mangeshraut712.github.io/agent-console/) | [![Trace timeline](docs/screenshots/trace-timeline.png)](https://mangeshraut712.github.io/agent-console/) | [![Context inspector](docs/screenshots/context-inspector.png)](https://mangeshraut712.github.io/agent-console/) |
+
+Refresh them locally with `APP_URL=https://mangeshraut712.github.io/agent-console/ npm run capture:screenshots` (or against `http://localhost:3000` with the stack running).
 
 ## GitHub Pages demo
 
@@ -117,7 +131,7 @@ WS_URL=ws://your-server:8080/ws npm run verify:server
 src/lib/           WebSocket client, reorder buffer, state machine
 src/components/    UI panels
 agent-server/      Reference mock backend (Docker)
-docs/              ADOPTING.md, screenshots, chaos demo video
+docs/              ADOPTING.md, screenshots/, chaos demo video
 ```
 
 ## Contributing
