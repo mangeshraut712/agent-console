@@ -71,13 +71,19 @@ Point it at **any server** that implements the [Agent Console protocol](docs/ADO
 
 ## Screenshots
 
-Captured from the [live GitHub Pages demo](https://mangeshraut712.github.io/agent-console/) (Sept 2026). Click **Connect**, then try a quick prompt.
+Framed captures of the live app (current UI).
 
-| Landing | Trace timeline | Context inspector |
-| --- | --- | --- |
-| [![Landing](docs/screenshots/landing.png)](https://mangeshraut712.github.io/agent-console/) | [![Trace timeline](docs/screenshots/trace-timeline.png)](https://mangeshraut712.github.io/agent-console/) | [![Context inspector](docs/screenshots/context-inspector.png)](https://mangeshraut712.github.io/agent-console/) |
+<div align="center">
 
-Refresh them locally with `APP_URL=https://mangeshraut712.github.io/agent-console/ npm run capture:screenshots` (or against `http://localhost:3000` with the stack running).
+<img src="docs/screenshots/01-landing.webp" alt="Landing: connect to a WebSocket agent backend" width="720" />
+
+<img src="docs/screenshots/02-tool-cards.webp" alt="Streaming reply with a completed lookup_metric tool card" width="720" />
+
+<img src="docs/screenshots/03-trace.webp" alt="Trace timeline filtered to tool calls" width="720" />
+
+<img src="docs/screenshots/04-context.webp" alt="Context inspector showing live schema diffs" width="720" />
+
+</div>
 
 ## GitHub Pages demo
 
