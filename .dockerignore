@@ -8,3 +8,4 @@ coverage
 *.tsbuildinfo
 docs/videos
 agent-server/node_modules
+.api-stash

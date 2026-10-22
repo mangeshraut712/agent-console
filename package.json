@@ -1,7 +1,7 @@
 {
   "name": "agent-console",
   "version": "1.2.1",
-  "description": "Real-time Agent Console — WebSocket streaming, tool calls, trace timeline, chaos survival",
+  "description": "Incident Desk — Nemotron plans on-call investigations, with a live trace and a seeded replay",
   "type": "module",
   "license": "MIT",
   "author": "Mangesh Raut",
@@ -17,7 +17,8 @@
     "setup": "npm ci && npm ci --prefix agent-server && npm run build --prefix agent-server",
     "dev": "next dev --turbopack",
     "build": "next build",
-    "build:pages": "GITHUB_PAGES=true NEXT_PUBLIC_DEMO_MODE=true NEXT_PUBLIC_WS_URL=demo://agent next build",
+    "build:pages": "node scripts/export-pages.mjs",
+    "deploy": "docker compose up --build -d",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",

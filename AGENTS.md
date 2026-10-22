@@ -4,10 +4,16 @@ Guidance for coding agents working in this repo.
 
 ## What this is
 
-A Next.js 15 / React 19 real-time debug UI for AI agent backends over WebSocket: streaming tokens,
-tool-call cards, and a live protocol trace. `agent-server/` is the mock backend used for demos and
-verification. Design rationale is in `DECISIONS.md`; read it before touching ordering, reconnection,
-or rendering code.
+Incident Desk is the product: an on-call investigation UI where NVIDIA Nemotron
+(`nvidia/nemotron-3-super-120b-a12b` by default) plans through Nebius Token Factory.
+The agent loop, client, seeded replay, and scorecard live in `src/agent/`. The HTTP entry
+is `src/app/api/investigate/route.ts`. Without `NEBIUS_API_KEY` the desk plays a labeled
+replay and must not present that trace as a live model response.
+
+The same repo still has the real-time debug UI for agent backends over WebSocket: streaming
+tokens, tool-call cards, and a live protocol trace. `agent-server/` is the mock backend used
+for protocol demos and verification. Design rationale is in `DECISIONS.md`; read it before
+touching ordering, reconnection, or rendering code.
 
 ## Setup
 
@@ -45,3 +51,13 @@ Static demo build for GitHub Pages: `npm run build:pages` (uses `demo://agent`, 
    `setState` per token.
 
 If `npm run verify:chaos` fails after your change, the change is wrong until proven otherwise.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

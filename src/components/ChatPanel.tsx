@@ -11,6 +11,8 @@ export function ChatPanel({
   onHighlightEvent,
   highlightedEventId,
   connectionStatus,
+  emptyHint = "Connect (demo://agent or your ws:// server) and send a message.",
+  placeholder,
 }: {
   messages: ConversationMessage[];
   onSendMessage: (content: string) => void;
@@ -18,6 +20,8 @@ export function ChatPanel({
   onHighlightEvent: (eventId: string) => void;
   highlightedEventId: string | null;
   connectionStatus: string;
+  emptyHint?: string;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -60,8 +64,7 @@ export function ChatPanel({
       <div className="messageList" ref={listRef} role="log" aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="emptyState">
-            <p>Connect (demo://agent or your ws:// server) and send a message.</p>
-            <p className="muted">Try: &quot;Summarise the Q3 report&quot; or &quot;Analyze the data&quot;</p>
+            <p>{emptyHint}</p>
           </div>
         )}
         {messages.map((msg) => (
@@ -79,9 +82,8 @@ export function ChatPanel({
         <textarea
           aria-label="Type a message"
           placeholder={
-            isConnected
-              ? "Type a message for the agent..."
-              : "Connect to the server to start..."
+            placeholder ??
+            (isConnected ? "Type a message for the agent..." : "Connect to the server to start...")
           }
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -113,7 +115,7 @@ function MessageBubble({
   highlightedEventId: string | null;
 }) {
   if (message.role === "user") {
-    return <div className="message messageUser">{message.text}</div>;
+    return <div className="message messageUser">{visibleUserText(message.text)}</div>;
   }
 
   const isBatchHighlighted =
@@ -158,6 +160,15 @@ function MessageBubble({
       )}
     </div>
   );
+}
+
+function visibleUserText(text: string): string {
+  const visible = text
+    .split("\n")
+    .filter((line) => !/^(incident|mode):/i.test(line.trim()))
+    .join("\n")
+    .trim();
+  return visible || text;
 }
 
 function StreamingText({

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WebSocketManager } from "./websocketManager";
 import { DemoAgentManager } from "./demoAgent";
+import { DeskAgentManager } from "./deskAgent";
 import { ReorderBuffer } from "./reorderBuffer";
 import { createFlushScheduler } from "./flushScheduler";
 import { markToolAckSent, resetToolAckRegistry } from "./toolAckRegistry";
@@ -11,6 +12,7 @@ import {
   setStoredWsUrl,
   isValidWsUrl,
   isDemoEndpoint,
+  isDeskEndpoint,
   DEFAULT_WS_URL,
 } from "./config";
 import type {
@@ -52,9 +54,9 @@ export interface AgentConsoleActions {
   sendToolAck: (callId: string) => void;
 }
 
-export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
+export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentConsoleActions {
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
-  const [wsUrl, setWsUrl] = useState(DEFAULT_WS_URL);
+  const [wsUrl, setWsUrl] = useState(endpoint ?? DEFAULT_WS_URL);
   const [lastError, setLastError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [traceEvents, setTraceEvents] = useState<TraceEvent[]>([]);
@@ -65,7 +67,7 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
   const traceEventsRef = useRef<TraceEvent[]>([]);
   const contextSnapshotsRef = useRef<ContextSnapshotEntry[]>([]);
 
-  const wsRef = useRef<WebSocketManager | DemoAgentManager | null>(null);
+  const wsRef = useRef<WebSocketManager | DemoAgentManager | DeskAgentManager | null>(null);
   const reorderBufRef = useRef<ReorderBuffer>(new ReorderBuffer());
   const processedSeqRef = useRef<number>(0);
   const isResumingRef = useRef(false);
@@ -321,15 +323,19 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
 
   const connect = useCallback(() => {
     if (!isValidWsUrl(wsUrl)) {
-      setLastError("Invalid WebSocket URL — use ws:// or wss://");
+      setLastError("Invalid endpoint — use ws://, wss://, demo://, or desk://");
       return;
     }
 
     setLastError(null);
-    setStoredWsUrl(wsUrl);
+    if (!isDeskEndpoint(wsUrl)) setStoredWsUrl(wsUrl);
     wsRef.current?.disconnect();
 
-    const ws = isDemoEndpoint(wsUrl) ? new DemoAgentManager() : new WebSocketManager(wsUrl);
+    const ws = isDeskEndpoint(wsUrl)
+      ? new DeskAgentManager()
+      : isDemoEndpoint(wsUrl)
+        ? new DemoAgentManager()
+        : new WebSocketManager(wsUrl);
     wsRef.current = ws;
 
     ws.setHandler((event) => {
@@ -445,8 +451,9 @@ export function useAgentConsole(): AgentConsoleState & AgentConsoleActions {
   }, []);
 
   useEffect(() => {
+    if (endpoint) return;
     setWsUrl(getStoredWsUrl());
-  }, []);
+  }, [endpoint]);
 
   useEffect(() => {
     return () => {

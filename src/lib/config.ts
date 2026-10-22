@@ -1,6 +1,9 @@
 /** In-browser mock agent used when a live WebSocket server is unavailable (GitHub Pages). */
 export const DEMO_WS_URL = "demo://agent";
 
+/** Incident Desk transport. Replay or live Nemotron, over the same protocol events. */
+export const DESK_ENDPOINT = "desk://incident";
+
 export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 /** Default WebSocket endpoint (override with NEXT_PUBLIC_WS_URL). */
@@ -17,10 +20,23 @@ export function isDemoEndpoint(url: string): boolean {
   }
 }
 
+export function isDeskEndpoint(url: string): boolean {
+  try {
+    return new URL(url.trim()).protocol === "desk:";
+  } catch {
+    return false;
+  }
+}
+
 export function isValidWsUrl(url: string): boolean {
   try {
     const parsed = new URL(url.trim());
-    return parsed.protocol === "ws:" || parsed.protocol === "wss:" || parsed.protocol === "demo:";
+    return (
+      parsed.protocol === "ws:" ||
+      parsed.protocol === "wss:" ||
+      parsed.protocol === "demo:" ||
+      parsed.protocol === "desk:"
+    );
   } catch {
     return false;
   }

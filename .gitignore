@@ -41,3 +41,6 @@ docs/videos/
 
 # Local tooling
 .codacy/
+
+# Temporary stash used by the GitHub Pages export
+.api-stash/

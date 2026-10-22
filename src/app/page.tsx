@@ -1,5 +1,5 @@
-import { AgentConsole } from "@/components/AgentConsole";
+import { AppShell } from "@/components/AppShell";
 
 export default function Page() {
-  return <AgentConsole />;
+  return <AppShell />;
 }
