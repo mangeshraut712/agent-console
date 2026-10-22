@@ -41,3 +41,6 @@ docs/videos/
 
 # Local tooling
 .codacy/
+# Local agent tooling
+.agents/
+skills-lock.json
