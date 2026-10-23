@@ -181,7 +181,7 @@ describe("incident agent loop", () => {
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
       urls.push(url);
-      if (url.includes("api.tavily.com")) {
+      if (isTavilySearchUrl(url)) {
         expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer tvly-test");
         return new Response(
           JSON.stringify({
@@ -190,7 +190,7 @@ describe("incident agent loop", () => {
           { status: 200 },
         );
       }
-      if (urls.filter((item) => item.includes("chat/completions")).length === 1) {
+      if (urls.filter((item) => isChatCompletionsUrl(item)).length === 1) {
         return new Response(
           chatBody(toolMessage("call_web", "web_search", { query: "Harbor ID certificate" }, "Check the vendor."), "tool_calls"),
           { status: 200 },
@@ -219,7 +219,7 @@ describe("incident agent loop", () => {
         { env: { NEBIUS_API_KEY: "live-key", TAVILY_API_KEY: "tvly-test" }, fetchImpl },
       ),
     );
-    expect(urls.some((url) => url === "https://api.tavily.com/search")).toBe(true);
+    expect(urls.some((url) => isTavilySearchUrl(url))).toBe(true);
     const web = withKey.find((step) => step.kind === "tool_call" && step.toolName === "web_search");
     expect(web && web.kind === "tool_call" ? web.result.live_call : false).toBe(true);
 
@@ -299,7 +299,192 @@ describe("incident agent loop", () => {
   test("MissingNebiusApiKeyError is the live-mode guard", () => {
     expect(new MissingNebiusApiKeyError().code).toBe("MISSING_NEBIUS_API_KEY");
   });
+
+  test("Tavily routing accepts only the parsed api.tavily.com search URL", () => {
+    expect(isTavilySearchUrl("https://api.tavily.com/search")).toBe(true);
+    expect(isTavilySearchUrl("https://api.tavily.com.evil.example/search")).toBe(false);
+    expect(isTavilySearchUrl("https://evil.example/search?next=https://api.tavily.com/search")).toBe(false);
+    expect(isTavilySearchUrl("https://user:api.tavily.com@evil.example/search")).toBe(false);
+    expect(isTavilySearchUrl("http://api.tavily.com/search")).toBe(false);
+    expect(isTavilySearchUrl("not a url")).toBe(false);
+    expect(isChatCompletionsUrl(`${DEFAULT_NEBIUS_BASE_URL}/chat/completions`)).toBe(true);
+    expect(isChatCompletionsUrl("https://api.tavily.com/search")).toBe(false);
+  });
+
+  test("unknown incidents fail before any network call", async () => {
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw new Error("unknown incident called the network");
+    };
+    for (const mode of ["live", "replay"] as const) {
+      const steps = await collect(
+        runInvestigation(
+          { incidentId: "not-a-seed", alert: "something broke", mode },
+          { env: { NEBIUS_API_KEY: "live-key" }, fetchImpl },
+        ),
+      );
+      expect(steps).toEqual([
+        expect.objectContaining({
+          kind: "error",
+          code: "UNKNOWN_INCIDENT",
+        }),
+      ]);
+      expect(steps[0]?.kind === "error" ? steps[0].message : "").toContain("checkout-latency");
+    }
+    expect(calls).toBe(0);
+  });
+
+  test("an empty model answer and a transport failure stay in-band", async () => {
+    const empty = await collect(
+      runInvestigation(
+        { incidentId: "queue-lag", alert: "lag", mode: "live" },
+        {
+          env: { NEBIUS_API_KEY: "live-key" },
+          fetchImpl: async () =>
+            new Response(chatBody({ role: "assistant", content: "   " }, "stop"), { status: 200 }),
+        },
+      ),
+    );
+    expect(empty.some((step) => step.kind === "error" && step.code === "EMPTY_MODEL_RESPONSE")).toBe(true);
+    expect(empty.some((step) => step.kind === "context" && step.contextId === "run")).toBe(true);
+
+    const broken = await collect(
+      runInvestigation(
+        { incidentId: "queue-lag", alert: "lag", mode: "live" },
+        {
+          env: { NEBIUS_API_KEY: "live-key" },
+          fetchImpl: async () => new Response("not-json", { status: 200 }),
+        },
+      ),
+    );
+    const parseError = broken.find((step) => step.kind === "error");
+    expect(parseError && parseError.kind === "error" ? parseError.code : "").toBe("NEBIUS_REQUEST");
+    expect(parseError && parseError.kind === "error" ? parseError.message : "").toContain("non-JSON");
+
+    const down = await collect(
+      runInvestigation(
+        { incidentId: "queue-lag", alert: "lag", mode: "live" },
+        {
+          env: { NEBIUS_API_KEY: "live-key" },
+          fetchImpl: async () => {
+            throw new Error("socket hang up");
+          },
+        },
+      ),
+    );
+    expect(down.find((step) => step.kind === "error")).toMatchObject({
+      kind: "error",
+      code: "NEBIUS_REQUEST",
+      message: "socket hang up",
+    });
+
+    const opaque = await collect(
+      runInvestigation(
+        { incidentId: "queue-lag", alert: "lag", mode: "live" },
+        {
+          env: { NEBIUS_API_KEY: "live-key" },
+          fetchImpl: (async () => {
+            throw "offline";
+          }) as typeof fetch,
+        },
+      ),
+    );
+    expect(opaque.find((step) => step.kind === "error")).toMatchObject({
+      kind: "error",
+      code: "NEBIUS_REQUEST",
+      message: "Nebius Token Factory request failed.",
+    });
+  });
+
+  test("an unknown tool and a thrown web search stay inside the tool result", async () => {
+    const script = [
+      chatBody(toolMessage("call_bad", "drop_database", { target: "payments-db" }, "This tool is not in the catalog."), "tool_calls"),
+      chatBody(
+        toolMessage("call_web", "web_search", { query: "vendor status" }, "Look outside after the unknown tool."),
+        "tool_calls",
+      ),
+      chatBody(
+        {
+          role: "assistant",
+          content: `The catalog rejected the first tool.\n${JSON.stringify({
+            ...VERDICT,
+            likely_cause: "certificate expired",
+            evidence_ids: ["ev-idp-cert"],
+            summary: "certificate expired",
+          })}`,
+        },
+        "stop",
+      ),
+    ];
+    const steps = await collect(
+      runInvestigation(
+        { incidentId: "auth-5xx", alert: "login 500", mode: "live" },
+        {
+          env: { NEBIUS_API_KEY: "live-key", TAVILY_API_KEY: "tvly-test" },
+          fetchImpl: async (input) => {
+            if (isTavilySearchUrl(String(input))) throw new Error("tavily unreachable");
+            const next = script.shift();
+            if (!next) throw new Error("unexpected extra model call");
+            return new Response(next, { status: 200 });
+          },
+        },
+      ),
+    );
+    const unknown = steps.find((step) => step.kind === "tool_call" && step.toolName === "drop_database");
+    expect(unknown && unknown.kind === "tool_call" ? unknown.result : {}).toEqual({
+      error: "Unknown tool",
+      tool: "drop_database",
+    });
+    const web = steps.find((step) => step.kind === "tool_call" && step.toolName === "web_search");
+    expect(web && web.kind === "tool_call" ? web.result.error : "").toBe("tavily unreachable");
+    expect(steps.some((step) => step.kind === "context" && step.contextId === "verdict")).toBe(true);
+    expect(steps.some((step) => step.kind === "error")).toBe(false);
+  });
+
+  test("a narrative without a verdict ends the run instead of inventing one", async () => {
+    const steps = await collect(
+      runInvestigation(
+        { incidentId: "checkout-latency", alert: "checkout", mode: "live" },
+        {
+          env: { NEBIUS_API_KEY: "live-key" },
+          fetchImpl: async () =>
+            new Response(
+              chatBody(
+                { role: "assistant", content: "I need another look before I name a cause." },
+                "stop",
+              ),
+              { status: 200 },
+            ),
+        },
+      ),
+    );
+    expect(steps.some((step) => step.kind === "token")).toBe(true);
+    expect(steps.some((step) => step.kind === "context" && step.contextId === "verdict")).toBe(false);
+    expect(steps.some((step) => step.kind === "error")).toBe(false);
+    expect(steps.some((step) => step.kind === "context" && step.contextId === "run")).toBe(true);
+  });
 });
+
+const TAVILY_SEARCH_HOST = "api.tavily.com";
+
+function requestUrl(value: string): URL | null {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+function isTavilySearchUrl(value: string): boolean {
+  const parsed = requestUrl(value);
+  return parsed?.protocol === "https:" && parsed.hostname === TAVILY_SEARCH_HOST && parsed.pathname === "/search";
+}
+
+function isChatCompletionsUrl(value: string): boolean {
+  const parsed = requestUrl(value);
+  return parsed?.pathname.endsWith("/chat/completions") === true;
+}
 
 function queueFinal(first: typeof fetch): typeof fetch {
   let count = 0;

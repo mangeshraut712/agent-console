@@ -195,7 +195,8 @@ export class DeskAgentManager {
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
-        if (!line.trim() || signal.aborted || !this.connected) return;
+        if (signal.aborted || !this.connected) return;
+        if (!line.trim()) continue;
         await this.emitLine(line);
       }
     }

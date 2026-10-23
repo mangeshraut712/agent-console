@@ -3,6 +3,7 @@ import { DEFAULT_NEBIUS_BASE_URL, DEFAULT_NEMOTRON_MODEL } from "./constants";
 import {
   MissingNebiusApiKeyError,
   NebiusHttpError,
+  NebiusResponseError,
   chatCompletionsUrl,
   createChatCompletion,
   nebiusStatus,
@@ -114,6 +115,19 @@ describe("Nebius Token Factory client", () => {
   test("keeps unparsed tool arguments instead of throwing", () => {
     expect(parseToolArguments("not-json")).toEqual({ _unparsed: "not-json" });
     expect(parseToolArguments({ service: "edge-proxy" })).toEqual({ service: "edge-proxy" });
+  });
+
+  test("rejects a non-object body, an empty choice list, and non-JSON", async () => {
+    expect(() => parseNebiusCompletion(null)).toThrow(NebiusResponseError);
+    expect(() => parseNebiusCompletion({ choices: [] })).toThrow(/no choices/);
+    const fetchImpl: typeof fetch = async () => new Response("not-json", { status: 200 });
+    await expect(
+      createChatCompletion(
+        { apiKey: "secret-key", baseUrl: DEFAULT_NEBIUS_BASE_URL, model: DEFAULT_NEMOTRON_MODEL },
+        { messages: [{ role: "user", content: "hi" }] },
+        fetchImpl,
+      ),
+    ).rejects.toThrow(/non-JSON/);
   });
 
   test("HTTP errors include the status and body", async () => {
