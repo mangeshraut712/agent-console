@@ -1,3 +1,4 @@
+import { matchesKeyword } from "./keywords";
 import type { ServerMessage } from "./types";
 
 export type DemoScriptEvent =
@@ -214,12 +215,12 @@ export const DEMO_SCRIPTS: DemoScript[] = [
 ];
 
 export function selectDemoScript(userMessage: string): DemoScript {
-  const lower = userMessage.toLowerCase();
+  const haystack = typeof userMessage === "string" ? userMessage : "";
 
   for (const script of DEMO_SCRIPTS) {
     if (script.triggers.length === 0) continue;
     for (const trigger of script.triggers) {
-      if (lower.includes(trigger)) {
+      if (matchesKeyword(haystack, trigger)) {
         return script;
       }
     }

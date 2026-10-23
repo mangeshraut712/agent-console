@@ -56,6 +56,33 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function testOriginGuard() {
+  console.log("\n── Test 0: Origin guard and reset method ──");
+  const getReset = await fetch(`${HTTP_URL}/reset`);
+  assert(getReset.status === 405, `GET /reset is rejected (${getReset.status})`);
+
+  const foreignLog = await fetch(`${HTTP_URL}/log`, { headers: { Origin: "https://evil.example" } });
+  assert(foreignLog.status === 403, `Foreign Origin cannot read /log (${foreignLog.status})`);
+
+  const postReset = await fetch(`${HTTP_URL}/reset`, { method: "POST" });
+  assert(postReset.ok, "POST /reset still resets the session");
+
+  const rejected = new WebSocket(WS_URL, { headers: { Origin: "https://evil.example" } });
+  const closed = await new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), 2000);
+    rejected.on("error", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+    rejected.on("open", () => {
+      clearTimeout(timer);
+      rejected.close();
+      resolve(false);
+    });
+  });
+  assert(closed, "WebSocket upgrade from a foreign Origin is rejected");
+}
+
 async function testNormalFlow() {
   console.log("\n── Test 1: Normal flow (greeting) ──");
   const ws = await connect();
@@ -293,7 +320,7 @@ async function testToolAckLogging() {
   console.log("\n── Test 6: TOOL_ACK logging ──");
 
   // Reset the log
-  await fetch(`${HTTP_URL}/reset`);
+  await fetch(`${HTTP_URL}/reset`, { method: "POST" });
 
   const ws = await connect();
   ws.send(JSON.stringify({ type: "USER_MESSAGE", content: "find the SLA docs" }));
@@ -399,6 +426,7 @@ async function main() {
   }
 
   try {
+    await testOriginGuard();
     await testNormalFlow();
     await testToolCallFlow();
     await testMultiToolFlow();

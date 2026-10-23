@@ -630,12 +630,12 @@ function generateLargeContext(): Record<string, unknown> {
  * Falls back to the default script.
  */
 export function selectScript(userMessage: string): ResponseScript {
-  const lower = userMessage.toLowerCase();
+  const haystack = typeof userMessage === "string" ? userMessage : "";
 
   for (const script of RESPONSE_SCRIPTS) {
     if (script.triggers.length === 0) continue; // skip default
     for (const trigger of script.triggers) {
-      if (lower.includes(trigger)) {
+      if (matchesKeyword(haystack, trigger)) {
         return script;
       }
     }
@@ -645,4 +645,11 @@ export function selectScript(userMessage: string): ResponseScript {
   const defaultScript = RESPONSE_SCRIPTS.find((s) => s.id === "default");
   if (!defaultScript) throw new Error("No default script found");
   return defaultScript;
+}
+
+function matchesKeyword(haystack: string, keyword: string): boolean {
+  const needle = keyword.trim().toLowerCase();
+  if (!needle) return false;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`).test(haystack.toLowerCase());
 }

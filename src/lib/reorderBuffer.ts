@@ -66,6 +66,11 @@ export class ReorderBuffer {
       return emitted;
     }
 
+    // A duplicate of a message we are still holding is not a newer revision.
+    if (this.buffer.has(seq)) {
+      return [];
+    }
+
     // Future message: buffer it if we have room
     if (this.buffer.size >= this.maxSize) {
       // Buffer full — drop the oldest buffered message to make room.

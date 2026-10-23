@@ -24,8 +24,8 @@ import type {
   ConnectionStatus,
 } from "./types";
 
-function traceIdForSeq(seq: number): string {
-  return `evt_seq_${seq}`;
+function traceIdForSeq(turn: number, seq: number): string {
+  return `evt_seq_${turn}_${seq}`;
 }
 
 export type ConnectionState = {
@@ -67,6 +67,8 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
   const traceEventsRef = useRef<TraceEvent[]>([]);
   const contextSnapshotsRef = useRef<ContextSnapshotEntry[]>([]);
 
+  const turnRef = useRef(0);
+  const pongCountRef = useRef(0);
   const wsRef = useRef<WebSocketManager | DemoAgentManager | DeskAgentManager | null>(null);
   const reorderBufRef = useRef<ReorderBuffer>(new ReorderBuffer());
   const processedSeqRef = useRef<number>(0);
@@ -149,7 +151,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
     (msg: ServerMessage & { type: "TOOL_CALL" }) => {
       const msgIdx = ensureAssistantStream(msg.stream_id);
       const msgs = messagesRef.current;
-      const traceEventId = traceIdForSeq(msg.seq);
+      const traceEventId = traceIdForSeq(turnRef.current, msg.seq);
 
       const tc: ToolCallWithResult = {
         call_id: msg.call_id,
@@ -189,7 +191,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
               ...tc,
               result: msg.result,
               acknowledged: true,
-              resultTraceEventId: traceIdForSeq(msg.seq),
+              resultTraceEventId: traceIdForSeq(turnRef.current, msg.seq),
             }
           : tc,
       );
@@ -228,7 +230,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
       markProcessedSeq(msg.seq);
 
       const traceEvent: TraceEvent = {
-        id: traceIdForSeq(msg.seq),
+        id: traceIdForSeq(turnRef.current, msg.seq),
         seq: msg.seq,
         type: msg.type,
         timestamp: Date.now(),
@@ -299,6 +301,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
       const ws = wsRef.current;
       if (!ws?.isConnected()) return;
 
+      turnRef.current += 1;
       reorderBufRef.current.reset(1);
       processedSeqRef.current = 0;
       ws.resetProcessedSeq();
@@ -367,7 +370,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
           break;
         case "pong_sent":
           appendTraceEvent({
-            id: `pong_${Date.now()}`,
+            id: `pong_${turnRef.current}_${pongCountRef.current++}`,
             seq: -1,
             type: "PONG",
             timestamp: Date.now(),
@@ -411,6 +414,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
     messagesRef.current = [];
     traceEventsRef.current = [];
     contextSnapshotsRef.current = [];
+    turnRef.current = 0;
     currentStreamRef.current = null;
     reorderBufRef.current.reset(1);
     processedSeqRef.current = 0;

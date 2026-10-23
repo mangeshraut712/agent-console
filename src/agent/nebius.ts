@@ -1,4 +1,6 @@
 import { DEFAULT_NEBIUS_BASE_URL, DEFAULT_NEMOTRON_MODEL, NEBIUS_PROVIDER } from "./constants";
+import { fetchWithTimeout, UpstreamTimeoutError } from "./fetchTimeout";
+import { redactSecrets } from "./redact";
 
 export type Env = Record<string, string | undefined>;
 
@@ -73,8 +75,26 @@ export class NebiusHttpError extends Error {
     readonly status: number,
     readonly body: string,
   ) {
-    super(`${NEBIUS_PROVIDER} request failed (${status}): ${body.slice(0, 400)}`);
+    super(`${NEBIUS_PROVIDER} request failed (${status}): ${redactSecrets(body).slice(0, 400)}`);
     this.name = "NebiusHttpError";
+  }
+}
+
+export class NebiusTimeoutError extends Error {
+  readonly code = "NEBIUS_TIMEOUT";
+
+  constructor() {
+    super("Nebius Token Factory did not respond before the timeout.");
+    this.name = "NebiusTimeoutError";
+  }
+}
+
+export class InvalidNebiusBaseUrlError extends Error {
+  readonly code = "INVALID_NEBIUS_BASE_URL";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidNebiusBaseUrlError";
   }
 }
 
@@ -100,7 +120,7 @@ export function nebiusStatus(env: Env): NebiusStatus {
     nebiusConfigured: Boolean(env.NEBIUS_API_KEY?.trim()),
     tavilyConfigured: Boolean(env.TAVILY_API_KEY?.trim()),
     model: env.NEBIUS_MODEL?.trim() || DEFAULT_NEMOTRON_MODEL,
-    baseUrl: trimBaseUrl(env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL),
+    baseUrl: displayBaseUrl(env.NEBIUS_BASE_URL),
     provider: NEBIUS_PROVIDER,
   };
 }
@@ -112,7 +132,7 @@ export function resolveNebiusConfig(env: Env): NebiusConfig {
   }
   return {
     apiKey,
-    baseUrl: trimBaseUrl(env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL),
+    baseUrl: safeBaseUrl(env.NEBIUS_BASE_URL?.trim() || DEFAULT_NEBIUS_BASE_URL),
     model: env.NEBIUS_MODEL?.trim() || DEFAULT_NEMOTRON_MODEL,
   };
 }
@@ -186,22 +206,33 @@ export async function createChatCompletion(
   fetchImpl: typeof fetch = fetch,
 ): Promise<NebiusCompletion> {
   const url = chatCompletionsUrl(config.baseUrl);
-  const response = await fetchImpl(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: request.messages,
-      tools: request.tools,
-      tool_choice: request.toolChoice ?? "auto",
-      temperature: request.temperature ?? 0.2,
-      max_tokens: request.maxTokens ?? 4096,
-    }),
-    signal: request.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      fetchImpl,
+      url,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: request.messages,
+          tools: request.tools,
+          tool_choice: request.toolChoice ?? "auto",
+          temperature: request.temperature ?? 0.2,
+          max_tokens: request.maxTokens ?? 4096,
+        }),
+      },
+      45_000,
+      request.signal,
+    );
+  } catch (error) {
+    if (error instanceof UpstreamTimeoutError) throw new NebiusTimeoutError();
+    throw error;
+  }
 
   const text = await response.text();
   if (!response.ok) {
@@ -216,8 +247,46 @@ export async function createChatCompletion(
   return parseNebiusCompletion(parsed);
 }
 
+const BLOCKED_BASE_HOSTS = new Set([
+  "169.254.169.254",
+  "metadata.google.internal",
+  "metadata.goog",
+]);
+
 function trimBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
+}
+
+function displayBaseUrl(configured: string | undefined): string {
+  try {
+    return safeBaseUrl(configured?.trim() || DEFAULT_NEBIUS_BASE_URL);
+  } catch {
+    return DEFAULT_NEBIUS_BASE_URL;
+  }
+}
+
+/** http(s) only, no embedded credentials, and not a cloud metadata address. */
+export function safeBaseUrl(input: string): string {
+  const trimmed = trimBaseUrl(input.trim());
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new InvalidNebiusBaseUrlError("NEBIUS_BASE_URL is not a valid URL.");
+  }
+  if (url.username || url.password) {
+    throw new InvalidNebiusBaseUrlError("NEBIUS_BASE_URL must not include credentials.");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new InvalidNebiusBaseUrlError("NEBIUS_BASE_URL must use http or https.");
+  }
+  const host = url.hostname.replace(/\.+$/, "").toLowerCase();
+  if (BLOCKED_BASE_HOSTS.has(host) || host.endsWith(".metadata.google.internal")) {
+    throw new InvalidNebiusBaseUrlError("NEBIUS_BASE_URL cannot target a cloud metadata address.");
+  }
+  const path = url.pathname.replace(/\/+$/, "");
+  const pathname = path === "/" ? "" : path;
+  return `${url.origin}${pathname}${url.search}`;
 }
 
 function firstString(value: unknown): string {

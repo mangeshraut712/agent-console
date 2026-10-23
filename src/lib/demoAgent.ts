@@ -1,3 +1,4 @@
+import { abortableDelay } from "./abortableDelay";
 import type { ClientMessage, ServerMessage } from "./types";
 import type { WsEvent, WsEventHandler } from "./websocketManager";
 import { selectDemoScript, type DemoScript } from "./demoScripts";
@@ -6,21 +7,6 @@ const TOKEN_DELAY_MS = 35;
 const TOOL_RESULT_DELAY_MS = 280;
 const ACK_TIMEOUT_MS = 5000;
 const PING_INTERVAL_MS = 8000;
-
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
 
 /**
  * In-browser stand-in for the mock agent-server.
@@ -148,7 +134,7 @@ export class DemoAgentManager {
             text: event.text,
             stream_id: streamId,
           });
-          await delay(TOKEN_DELAY_MS, signal);
+          await abortableDelay(TOKEN_DELAY_MS, signal);
           break;
         case "context":
           this.pushMessage({
@@ -169,7 +155,7 @@ export class DemoAgentManager {
             stream_id: streamId,
           });
           await this.waitForAck(callId);
-          await delay(TOOL_RESULT_DELAY_MS, signal);
+          await abortableDelay(TOOL_RESULT_DELAY_MS, signal);
           if (signal.aborted || !this.connected) return;
           this.pushMessage({
             type: "TOOL_RESULT",

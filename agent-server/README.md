@@ -33,7 +33,7 @@ npm start -- --port 8080     # custom port
 | `ws://localhost:4747/ws` | WebSocket - connect your client here |
 | `GET /health` | Returns server status, mode, current seq, connection state |
 | `GET /log` | Returns JSON array of all client events the server recorded (PONG responses, TOOL_ACK messages, RESUME messages, protocol violations). **This is how evaluators verify your client.** |
-| `GET /reset` | Resets the session state (clears history and logs) |
+| `POST /reset` | Resets the session state (clears history and logs) |
 
 ## Trigger Keywords
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeDiff } from "./diff";
+import { computeDiff, formatPreview } from "./diff";
 
 describe("computeDiff", () => {
   it("returns empty diff for identical empty objects", () => {
@@ -63,6 +63,23 @@ describe("computeDiff", () => {
     expect(types.indexOf("added")).toBeLessThan(types.indexOf("removed"));
     expect(types.indexOf("removed")).toBeLessThan(types.indexOf("changed"));
     expect(types.indexOf("changed")).toBeLessThan(types.indexOf("unchanged"));
+  });
+
+  it("shallow diff compares arrays by length and still reports new keys", () => {
+    const diff = computeDiff(
+      { tables: [{ name: "users" }, { name: "orders" }] },
+      { tables: [{ name: "users" }, { name: "invoices" }], done: true },
+      { shallowOnly: true },
+    );
+    expect(diff.find((node) => node.key === "tables")).toMatchObject({ type: "unchanged" });
+    expect(diff.find((node) => node.key === "done")).toMatchObject({ type: "added", newValue: true });
+  });
+
+  it("previews large values without dumping them", () => {
+    const huge = "x".repeat(200_000);
+    expect(formatPreview({ blob: huge })).toBe(`{blob: "${"x".repeat(24)}…"}`);
+    expect(formatPreview({ blob: huge })).not.toContain("x".repeat(40));
+    expect(formatPreview(Array.from({ length: 20 }, (_, index) => index))).toBe("Array(20)");
   });
 
   it("detects array value changes", () => {

@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import {
   ServerMessage,
-  ClientMessage,
   ClientLogEntry,
   ServerMode,
   ChaosConfig,
 } from "./types.js";
 import { selectScript } from "./scripts.js";
 import { ChaosEngine, generateChaosConfig } from "./chaos.js";
+import { isAllowedAgentOrigin } from "./origin.js";
 
 // ─────────────────────────────────────────────────────────────
 // AgentServer
@@ -37,6 +37,8 @@ export class AgentServer {
   private missedPongs: number = 0;
   private readonly HEARTBEAT_INTERVAL_MS = 12_000;
   private readonly PONG_TIMEOUT_MS = 3_000;
+  private readonly MAX_CLIENT_LOG = 1_000;
+  private readonly MAX_USER_MESSAGE_CHARS = 16_000;
   private pongTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   // ── Tool ACK tracking ─────────────────────────────────────
@@ -57,7 +59,12 @@ export class AgentServer {
       this.handleHttp(req, res);
     });
 
-    this.wss = new WebSocketServer({ server: this.httpServer, path: "/ws" });
+    this.wss = new WebSocketServer({
+      server: this.httpServer,
+      path: "/ws",
+      maxPayload: 256 * 1024,
+      verifyClient: (info: { origin: string }) => isAllowedAgentOrigin(info.origin || undefined),
+    });
     this.wss.on("connection", (ws) => this.handleConnection(ws));
   }
 
@@ -75,10 +82,12 @@ export class AgentServer {
   // ─────────────────────────────────────────────────────────
 
   private handleHttp(req: http.IncomingMessage, res: http.ServerResponse): void {
-    // CORS headers for local dev
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && !isAllowedAgentOrigin(origin)) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "origin_not_allowed" }));
+      return;
+    }
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -105,6 +114,11 @@ export class AgentServer {
     }
 
     if (req.url === "/reset") {
+      if (req.method !== "POST") {
+        res.writeHead(405, { Allow: "POST", "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "method_not_allowed" }));
+        return;
+      }
       this.resetSession();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "reset" }));
@@ -165,35 +179,49 @@ export class AgentServer {
   // ─────────────────────────────────────────────────────────
 
   private handleMessage(ws: WebSocket, raw: RawData): void {
-    let msg: ClientMessage;
+    let parsed: unknown;
     try {
-      msg = JSON.parse(raw.toString()) as ClientMessage;
+      parsed = JSON.parse(raw.toString());
     } catch {
       this.logClient("PARSE_ERROR", { raw: raw.toString().slice(0, 200) }, "error");
       return;
     }
+    if (!parsed || typeof parsed !== "object") {
+      this.logClient("PARSE_ERROR", {}, "error");
+      return;
+    }
+    const msg = parsed as Record<string, unknown>;
 
     switch (msg.type) {
       case "USER_MESSAGE":
-        this.logClient("USER_MESSAGE", { content: msg.content }, "ok");
         this.handleUserMessage(ws, msg.content);
         break;
 
       case "PONG":
-        this.handlePong(msg.echo);
+        this.handlePong(typeof msg.echo === "string" ? msg.echo : "");
         break;
 
-      case "RESUME":
-        this.logClient("RESUME", { last_seq: msg.last_seq }, "ok");
-        this.handleResume(ws, msg.last_seq);
+      case "RESUME": {
+        const lastSeq = msg.last_seq;
+        if (typeof lastSeq !== "number" || !Number.isInteger(lastSeq) || lastSeq < 0) {
+          this.logClient("RESUME", {}, "error");
+          return;
+        }
+        this.logClient("RESUME", { last_seq: lastSeq }, "ok");
+        this.handleResume(ws, lastSeq);
         break;
+      }
 
       case "TOOL_ACK":
+        if (typeof msg.call_id !== "string" || msg.call_id.length === 0) {
+          this.logClient("TOOL_ACK", {}, "error");
+          return;
+        }
         this.handleToolAck(msg.call_id);
         break;
 
       default:
-        this.logClient("UNKNOWN_MESSAGE", { msg }, "error");
+        this.logClient("UNKNOWN_MESSAGE", { type: typeof msg.type === "string" ? msg.type : "invalid" }, "error");
     }
   }
 
@@ -201,7 +229,7 @@ export class AgentServer {
   // USER_MESSAGE → run agent script
   // ─────────────────────────────────────────────────────────
 
-  private handleUserMessage(ws: WebSocket, content: string): void {
+  private handleUserMessage(ws: WebSocket, content: unknown): void {
     // Abort any in-progress stream
     this.abortStream();
 
@@ -214,6 +242,18 @@ export class AgentServer {
       this.chaosEngine.reset();
     }
 
+    if (typeof content !== "string") {
+      this.logClient("USER_MESSAGE", {}, "error");
+      this.emitError(ws, "BAD_MESSAGE", "USER_MESSAGE content must be a string.");
+      return;
+    }
+    if (content.length > this.MAX_USER_MESSAGE_CHARS) {
+      this.logClient("USER_MESSAGE", { length: content.length }, "error");
+      this.emitError(ws, "MESSAGE_TOO_LARGE", "USER_MESSAGE content is too long.");
+      return;
+    }
+
+    this.logClient("USER_MESSAGE", { content: content.slice(0, 500) }, "ok");
     const script = selectScript(content);
     console.log(`[agent-server] Selected script: ${script.name} (${script.id})`);
 
@@ -487,6 +527,10 @@ export class AgentServer {
       this.eventHistory.push(pingMsg);
       this.rawSend(ws, pingMsg);
 
+      if (this.pongTimeoutHandle) {
+        clearTimeout(this.pongTimeoutHandle);
+        this.pongTimeoutHandle = null;
+      }
       // Set a timeout for the PONG
       this.pongTimeoutHandle = setTimeout(() => {
         if (this.pendingPing && this.pendingPing.challenge === challenge) {
@@ -537,20 +581,28 @@ export class AgentServer {
 
   private delay(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, ms);
-      if (signal) {
-        const onAbort = () => {
-          clearTimeout(timer);
-          reject(new DOMException("Aborted", "AbortError"));
-        };
-        if (signal.aborted) {
-          clearTimeout(timer);
-          reject(new DOMException("Aborted", "AbortError"));
-          return;
-        }
-        signal.addEventListener("abort", onAbort, { once: true });
+      if (signal?.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
       }
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
+  }
+
+  private emitError(ws: WebSocket, code: string, message: string): void {
+    const error: ServerMessage = { type: "ERROR", seq: this.nextSeq(), code, message };
+    const end: ServerMessage = { type: "STREAM_END", seq: this.nextSeq(), stream_id: "rejected" };
+    this.eventHistory.push(error, end);
+    this.rawSend(ws, error);
+    this.rawSend(ws, end);
   }
 
   private abortStream(): void {
@@ -588,5 +640,8 @@ export class AgentServer {
       data,
       verdict,
     });
+    if (this.clientLog.length > this.MAX_CLIENT_LOG) {
+      this.clientLog.splice(0, this.clientLog.length - this.MAX_CLIENT_LOG);
+    }
   }
 }

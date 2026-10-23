@@ -19,6 +19,10 @@ describe("parseServerMessage", () => {
 
   test("isServerMessage validates shape", () => {
     expect(isServerMessage({ type: "PING", seq: 0, challenge: "abc" })).toBe(true);
+    expect(isServerMessage({ type: "PING", seq: 2, challenge: "" })).toBe(true);
     expect(isServerMessage(null)).toBe(false);
+    expect(parseServerMessage(JSON.stringify({ type: "TOKEN", seq: 1.5, text: "a", stream_id: "s" }))).toBeNull();
+    expect(parseServerMessage(JSON.stringify({ type: "TOKEN", seq: 1, stream_id: "s" }))).toBeNull();
+    expect(parseServerMessage(JSON.stringify({ type: "TOOL_CALL", seq: 1, call_id: "c", tool_name: "t", stream_id: "s" }))).toBeNull();
   });
 });

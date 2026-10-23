@@ -26,6 +26,8 @@ jobs:
       - name: Install dependencies
         run: npm run setup
 
+      - name: Lint
+        run: npm run lint
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
@@ -47,22 +49,29 @@ jobs:
       - name: Install dependencies
         run: npm run setup
 
-      - name: Start agent-server
-        working-directory: agent-server
-        run: npm start &
-
-      - name: Wait for health
+      - name: Protocol verification
         run: |
-          for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:4747/health && exit 0
+          set -euo pipefail
+          npm start --prefix agent-server > /tmp/agent-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4747/health >/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "agent-server exited before it became healthy"
+              cat /tmp/agent-server.log
+              exit 1
+            fi
             sleep 1
           done
-          echo "agent-server did not become healthy in time"
-          exit 1
-
-      - name: Protocol verification
-        run: npm run verify:server
-
-      - name: Agent-server integration tests
-        working-directory: agent-server
-        run: node test.mjs
+          if [ "$ready" -ne 1 ]; then
+            echo "agent-server did not become healthy in time"
+            cat /tmp/agent-server.log
+            exit 1
+          fi
+          npm run verify:server
+          node agent-server/test.mjs

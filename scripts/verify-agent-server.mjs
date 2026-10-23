@@ -63,7 +63,7 @@ async function fetchJson(url) {
 }
 
 async function runSession(label, userMessage) {
-  await fetch(`${RESET_URL}`).catch(() => {});
+  await fetch(RESET_URL, { method: "POST" }).catch(() => {});
 
   const reorderBuf = new ReorderBuffer();
   let processedSeq = 0;
@@ -126,11 +126,8 @@ async function runSession(label, userMessage) {
           return;
         }
 
-        if (msg.type === "PING") {
-          if (msg.challenge && msg.challenge !== "") {
-            ws.send(JSON.stringify({ type: "PONG", echo: msg.challenge }));
-          }
-          return;
+        if (msg.type === "PING" && msg.challenge && msg.challenge !== "") {
+          ws.send(JSON.stringify({ type: "PONG", echo: msg.challenge }));
         }
 
         const send = (payload) => ws.send(JSON.stringify(payload));

@@ -3,27 +3,13 @@ import { parseInvestigationContent } from "@/agent/parseRequest";
 import { ProtocolEncoder } from "@/agent/protocol";
 import { runReplay } from "@/agent/replay";
 import type { AgentStep } from "@/agent/types";
+import { abortableDelay } from "./abortableDelay";
 import { parseServerMessage } from "./parseMessage";
 import type { ClientMessage, ServerMessage } from "./types";
 import type { WsEvent, WsEventHandler } from "./websocketManager";
 
 const TOKEN_DELAY_MS = 24;
 const ACK_TIMEOUT_MS = 5000;
-
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
 
 /**
  * Speaks the agent-console protocol for Incident Desk.
@@ -158,7 +144,7 @@ export class DeskAgentManager {
       if (signal.aborted || !this.connected) return;
       for (const message of encoder.encode(step)) {
         this.pushMessage(message);
-        if (message.type === "TOKEN") await delay(TOKEN_DELAY_MS, signal);
+        if (message.type === "TOKEN") await abortableDelay(TOKEN_DELAY_MS, signal);
         if (message.type === "TOOL_CALL") await this.waitForAck(message.call_id);
       }
     }

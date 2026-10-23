@@ -133,7 +133,7 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
           </p>
         </div>
         <div className="deskStatus">
-          <p className={connected ? "statusPill statusPillOk" : "statusPill"}>
+          <p className={connected ? "statusPill statusPillOk" : "statusPill"} role="status">
             {connected ? "Desk connected" : connection.status === "disconnected" ? "Disconnected" : "Connecting"}
           </p>
           <button type="button" className="toolbarBtn" onClick={onOpenConsole}>

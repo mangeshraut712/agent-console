@@ -125,9 +125,14 @@ async function dispatchTool(
   }
 }
 
+const MAX_WEB_QUERY_CHARS = 400;
+
 async function searchWeb(args: Record<string, unknown>, ctx: ToolContext): Promise<Record<string, unknown>> {
   const query = typeof args.query === "string" ? args.query.trim() : "";
   if (!query) return { error: "query is required" };
+  if (query.length > MAX_WEB_QUERY_CHARS) {
+    return { error: "query is too long", query: query.slice(0, 80) };
+  }
   if (ctx.mode === "replay") return seededWebSearch(ctx.incidentId, query);
   return tavilySearch(query, ctx.env, ctx.fetchImpl, ctx.signal);
 }

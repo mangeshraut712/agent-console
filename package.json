@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/mangeshraut712/agent-console.git"
   },
-    "homepage": "https://mangeshraut712.github.io/agent-console/",
+  "homepage": "https://mangeshraut712.github.io/agent-console/",
   "bugs": {
     "url": "https://github.com/mangeshraut712/agent-console/issues"
   },
@@ -26,12 +26,13 @@
     "verify:chaos": "node scripts/verify-agent-server.mjs --mode chaos",
     "capture:screenshots": "node scripts/capture-submission.mjs --mode screenshots",
     "capture:chaos-video": "node scripts/capture-submission.mjs --mode chaos-video",
+    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "stack": "docker compose up --build",
     "stack:down": "docker compose down"
   },
   "dependencies": {
-    "next": "16.3.8",
+    "next": "16.4.3",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -39,10 +40,10 @@
     "@types/node": "22.15.21",
     "@types/react": "19.1.4",
     "@types/react-dom": "19.1.5",
+    "playwright": "^1.52.0",
     "typescript": "5.8.3",
     "vite": "^6.4.5",
-    "vitest": "^5.0.5",
-    "playwright": "^1.52.0"
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=20.0.0"

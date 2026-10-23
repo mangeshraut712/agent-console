@@ -46,7 +46,7 @@ Endpoints:
   ws://localhost:<port>/ws       WebSocket endpoint
   GET http://localhost:<port>/health   Health check
   GET http://localhost:<port>/log      Client event log (JSON)
-  GET http://localhost:<port>/reset    Reset session state
+  POST http://localhost:<port>/reset  Reset session state
 
 Trigger Keywords (in USER_MESSAGE):
   hello, hi, hey          → Simple greeting (no tool calls)

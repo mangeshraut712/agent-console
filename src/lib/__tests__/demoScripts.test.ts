@@ -13,6 +13,12 @@ describe("selectDemoScript", () => {
   test("falls back to default", () => {
     expect(selectDemoScript("please continue").id).toBe("default");
   });
+
+  test("does not treat hi inside another word as a greeting", () => {
+    expect(selectDemoScript("which service is down").id).toBe("default");
+    expect(selectDemoScript("this ship is high").id).toBe("default");
+    expect(selectDemoScript("hi there").id).toBe("greeting");
+  });
 });
 
 describe("toServerMessages", () => {
