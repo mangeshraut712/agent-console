@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { GET } from "@/app/api/health/route";
 import { POST } from "@/app/api/investigate/route";
 import { DEFAULT_NEMOTRON_MODEL } from "@/agent/constants";
+import { MAX_INVESTIGATION_CHARS, resetInvestigationRateLimit } from "@/agent/requestGuard";
 
 const originalFetch = globalThis.fetch;
 const ENV_KEYS = ["NEBIUS_API_KEY", "NEBIUS_BASE_URL", "NEBIUS_MODEL", "TAVILY_API_KEY"] as const;
@@ -37,6 +38,7 @@ function investigate(content: unknown, signal?: AbortSignal): Promise<Response> 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   restoreEnv();
+  resetInvestigationRateLimit();
 });
 
 describe("incident desk HTTP routes", () => {
@@ -57,7 +59,11 @@ describe("incident desk HTTP routes", () => {
 
   test("rejects a body that is not a JSON object with content", async () => {
     const invalid = await POST(
-      new Request("http://localhost/api/investigate", { method: "POST", body: "not-json" }),
+      new Request("http://localhost/api/investigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "not-json",
+      }),
     );
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: "Expected a JSON body." });
@@ -69,10 +75,34 @@ describe("incident desk HTTP routes", () => {
     const wrongShape = await POST(
       new Request("http://localhost/api/investigate", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: 4 }),
       }),
     );
     expect(wrongShape.status).toBe(400);
+  });
+
+  test("rejects cross-origin, non-JSON, and oversized investigation requests", async () => {
+    const plain = await POST(
+      new Request("http://localhost/api/investigate", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ content: "checkout is slow" }),
+      }),
+    );
+    expect(plain.status).toBe(415);
+
+    const foreign = await POST(
+      new Request("http://localhost/api/investigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+        body: JSON.stringify({ content: "mode:live\ncheckout is slow" }),
+      }),
+    );
+    expect(foreign.status).toBe(403);
+
+    const oversized = await investigate(`incident:checkout-latency\n${"x".repeat(MAX_INVESTIGATION_CHARS)}`);
+    expect(oversized.status).toBe(413);
   });
 
   test("streams a replay without calling the network", async () => {

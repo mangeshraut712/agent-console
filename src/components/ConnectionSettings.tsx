@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import type { ConnectionStatus } from "@/lib/types";
 import { isDemoEndpoint, isValidWsUrl } from "@/lib/config";
 
@@ -36,6 +37,8 @@ export function ConnectionSettings({
     status === "connected" || status === "resuming" || status === "reconnecting";
   const isTransient = status === "connecting";
   const urlValid = isValidWsUrl(wsUrl);
+  const hintId = useId();
+  const showHint = !urlValid && wsUrl.trim() !== "";
 
   return (
     <div className="connectionSettings">
@@ -52,6 +55,9 @@ export function ConnectionSettings({
           placeholder="ws://localhost:4747/ws"
           disabled={isLive || isTransient}
           spellCheck={false}
+          autoComplete="off"
+          aria-invalid={showHint}
+          aria-describedby={showHint ? hintId : undefined}
         />
         <div className="connectionIndicator connectionIndicatorInline">
           <span
@@ -79,8 +85,8 @@ export function ConnectionSettings({
           </button>
         )}
       </div>
-      {!urlValid && wsUrl.trim() !== "" && (
-        <p className="connectionUrlHint">
+      {showHint && (
+        <p id={hintId} className="connectionUrlHint" role="status">
           Use a WebSocket URL starting with <code>ws://</code> or <code>wss://</code>, or{" "}
           <code>demo://agent</code> for the in-browser mock.
         </p>

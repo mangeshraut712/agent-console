@@ -35,6 +35,17 @@ describe("incident tools", () => {
     expect(unmatched.error).toBe("No runbook section matched.");
     expect(unmatched.available).toEqual(expect.arrayContaining(["Checkout latency", "Consumer lag"]));
     expect((await executeTool("web_search", { query: "  " }, context())).error).toBe("query is required");
+    expect((await executeTool("search_logs", { service: "checkout-api", query: "a" }, context())).error).toMatch(
+      /at least 2/,
+    );
+    const pool = await executeTool("search_logs", { service: "checkout-api", query: "pool" }, context());
+    expect(JSON.stringify(pool.matches)).toContain("ev-checkout-pool");
+    const latency = await executeTool(
+      "search_logs",
+      { service: "checkout-api", query: "latency" },
+      context(),
+    );
+    expect(latency.matches).toEqual([]);
   });
 
   test("replay web search uses the seed and never calls Tavily", async () => {
@@ -61,6 +72,14 @@ describe("incident tools", () => {
     expect(calls).toBe(0);
     expect(empty.results).toEqual([]);
     expect(empty.note).toContain("Tavily was not called");
+
+    const huge = await executeTool(
+      "web_search",
+      { query: "a".repeat(401) },
+      context({ mode: "live", env: { TAVILY_API_KEY: "tvly-test" } }),
+    );
+    expect(huge.error).toBe("query is too long");
+    expect(String(huge.query).length).toBeLessThan(401);
   });
 
   test("live web search returns Tavily failures without throwing", async () => {

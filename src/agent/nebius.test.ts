@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { DEFAULT_NEBIUS_BASE_URL, DEFAULT_NEMOTRON_MODEL } from "./constants";
 import {
   MissingNebiusApiKeyError,
+  InvalidNebiusBaseUrlError,
   NebiusHttpError,
   NebiusResponseError,
   chatCompletionsUrl,
@@ -81,6 +82,22 @@ describe("Nebius Token Factory client", () => {
     expect(completion.content).toBe("ok");
     expect(completion.reasoning).toBe("thought");
     expect(completion.usage.reasoningTokens).toBe(1);
+  });
+
+  test("rejects credentialed and metadata base URLs and redacts upstream secrets", () => {
+    expect(() => resolveNebiusConfig({ NEBIUS_API_KEY: "k", NEBIUS_BASE_URL: "http://169.254.169.254" })).toThrow(
+      InvalidNebiusBaseUrlError,
+    );
+    expect(() =>
+      resolveNebiusConfig({ NEBIUS_API_KEY: "k", NEBIUS_BASE_URL: "https://user:secret@example.com/v1" }),
+    ).toThrow(/credentials/);
+    expect(() => resolveNebiusConfig({ NEBIUS_API_KEY: "k", NEBIUS_BASE_URL: "file:///etc/passwd" })).toThrow(
+      /http or https/,
+    );
+    const httpError = new NebiusHttpError(401, "denied Bearer super-secret-value");
+    expect(httpError.message).toContain("401");
+    expect(httpError.message).toContain("[redacted]");
+    expect(httpError.message).not.toContain("super-secret-value");
   });
 
   test("parses tool call arguments and the reasoning field", () => {

@@ -1,8 +1,10 @@
 import { NEBIUS_PROVIDER } from "./constants";
 import { getIncident, unknownIncidentMessage, type Incident } from "./incidents";
 import {
+  InvalidNebiusBaseUrlError,
   MissingNebiusApiKeyError,
   NebiusHttpError,
+  NebiusTimeoutError,
   createChatCompletion,
   resolveNebiusConfig,
   type ChatMessage,
@@ -31,7 +33,7 @@ export async function* runLiveInvestigation(
   try {
     config = resolveNebiusConfig(deps.env);
   } catch (error) {
-    if (error instanceof MissingNebiusApiKeyError) {
+    if (error instanceof MissingNebiusApiKeyError || error instanceof InvalidNebiusBaseUrlError) {
       yield { kind: "error", code: error.code, message: error.message };
       return;
     }
@@ -218,7 +220,7 @@ async function runTool(
 }
 
 function modelError(error: unknown): AgentStep {
-  if (error instanceof NebiusHttpError) {
+  if (error instanceof NebiusHttpError || error instanceof NebiusTimeoutError) {
     return { kind: "error", code: error.code, message: error.message };
   }
   if (error instanceof Error) {

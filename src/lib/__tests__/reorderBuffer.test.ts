@@ -105,6 +105,15 @@ describe("ReorderBuffer", () => {
       expect(result).toHaveLength(0);
     });
 
+    test("duplicate of a buffered message keeps the first payload", () => {
+      buf.accept(token(3, "first"));
+      expect(buf.accept(token(3, "second"))).toHaveLength(0);
+      const first = buf.accept(token(1, "one"));
+      const rest = buf.accept(token(2, "two"));
+      const third = [...first, ...rest].find((message) => message.seq === 3);
+      expect(third && third.type === "TOKEN" ? third.text : "").toBe("first");
+    });
+
     test("duplicate after gap fill is dropped", () => {
       buf.accept(token(2)); // buffered
       buf.accept(token(1)); // emits 1, 2

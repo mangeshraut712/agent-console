@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import type { ContextSnapshotEntry } from "@/lib/types";
-import { computeDiff, estimateJsonBytes, LARGE_CONTEXT_BYTES, type DiffNode } from "@/lib/diff";
+import { computeDiff, estimateJsonBytes, formatPreview, LARGE_CONTEXT_BYTES, type DiffNode } from "@/lib/diff";
 
 /**
  * Context panel that displays context snapshots with:
@@ -49,22 +49,23 @@ export function ContextInspector({
     setSnapshotIndex(Math.max(0, currentSnapshots.length - 1));
   }, [effectiveContextId, currentSnapshots.length]);
 
-  // Compute diff between the selected snapshot and its predecessor
-  const diffNodes = useMemo(() => {
-    if (currentSnapshots.length === 0) return [];
+  const selectedView = useMemo(() => {
+    if (currentSnapshots.length === 0) {
+      return { diffNodes: [] as DiffNode[], payloadBytes: 0 };
+    }
     const idx = Math.min(snapshotIndex, currentSnapshots.length - 1);
     const snap = currentSnapshots[idx];
-    if (!snap) return [];
+    if (!snap) return { diffNodes: [] as DiffNode[], payloadBytes: 0 };
 
     const payloadBytes = estimateJsonBytes(snap.data);
     const shallowOnly = payloadBytes >= LARGE_CONTEXT_BYTES;
-
-    if (idx === 0) {
-      return computeDiff(null, snap.data, { shallowOnly });
-    }
-    const prev = currentSnapshots[idx - 1];
-    return computeDiff(prev!.data, snap.data, { shallowOnly });
+    const diffNodes =
+      idx === 0
+        ? computeDiff(null, snap.data, { shallowOnly })
+        : computeDiff(currentSnapshots[idx - 1]!.data, snap.data, { shallowOnly });
+    return { diffNodes, payloadBytes };
   }, [currentSnapshots, snapshotIndex]);
+  const { diffNodes, payloadBytes } = selectedView;
 
   // Handle empty state
   if (contextIds.length === 0) {
@@ -138,7 +139,7 @@ export function ContextInspector({
 
       {/* Diff tree */}
       <div className="contextTree">
-        {estimateJsonBytes(currentSnapshots[snapshotIndex]?.data) >= LARGE_CONTEXT_BYTES && (
+        {payloadBytes >= LARGE_CONTEXT_BYTES && (
           <p className="contextLargeHint muted">
             Large snapshot — showing top-level diff only. Expand nodes for detail.
           </p>
@@ -179,7 +180,7 @@ function DiffTreeNode({
   expandedKeys: Set<string>;
   onToggle: (key: string) => void;
 }) {
-  const hasChildren = node.children && node.children.length > 0;
+  const hasChildren = Boolean(node.children && node.children.length > 0);
   const fullKey = `${depth}_${node.key}`;
   const isExpanded = expandedKeys.has(fullKey) && hasChildren;
 
@@ -193,38 +194,45 @@ function DiffTreeNode({
           : "diffUnchanged";
 
   const indent = depth * 16;
+  const row = (
+    <>
+      {hasChildren && <span className="diffToggle" aria-hidden="true">{isExpanded ? "▼" : "▶"}</span>}
+      <span className="diffKey">{node.key}</span>
+      {node.type !== "unchanged" && <span className="diffBadge">{node.type}</span>}
+      {!hasChildren && node.type === "added" && <span className="diffValue">{formatPreview(node.newValue)}</span>}
+      {!hasChildren && node.type === "removed" && (
+        <span className="diffValue diffOldValue">{formatPreview(node.oldValue)}</span>
+      )}
+      {!hasChildren && node.type === "changed" && (
+        <span className="diffValue">
+          <span className="diffOldValue">{formatPreview(node.oldValue)}</span>
+          {" → "}
+          <span className="diffNewValue">{formatPreview(node.newValue)}</span>
+        </span>
+      )}
+      {!hasChildren && node.type === "unchanged" && (
+        <span className="diffValue">{formatPreview(node.oldValue)}</span>
+      )}
+    </>
+  );
 
   return (
     <div className="diffNode">
-      <div
-        className={`diffNodeRow ${typeClass}`}
-        style={{ paddingLeft: `${12 + indent}px` }}
-        onClick={() => hasChildren && onToggle(fullKey)}
-      >
-        {hasChildren && (
-          <span className="diffToggle">{isExpanded ? "▼" : "▶"}</span>
-        )}
-        <span className="diffKey">{node.key}</span>
-        {node.type !== "unchanged" && (
-          <span className="diffBadge">{node.type}</span>
-        )}
-        {!hasChildren && node.type === "added" && (
-          <span className="diffValue">{formatValue(node.newValue)}</span>
-        )}
-        {!hasChildren && node.type === "removed" && (
-          <span className="diffValue diffOldValue">{formatValue(node.oldValue)}</span>
-        )}
-        {!hasChildren && node.type === "changed" && (
-          <span className="diffValue">
-            <span className="diffOldValue">{formatValue(node.oldValue)}</span>
-            {" → "}
-            <span className="diffNewValue">{formatValue(node.newValue)}</span>
-          </span>
-        )}
-        {!hasChildren && node.type === "unchanged" && (
-          <span className="diffValue">{formatValue(node.oldValue)}</span>
-        )}
-      </div>
+      {hasChildren ? (
+        <button
+          type="button"
+          className={`diffNodeRow ${typeClass}`}
+          style={{ paddingLeft: `${12 + indent}px` }}
+          aria-expanded={isExpanded}
+          onClick={() => onToggle(fullKey)}
+        >
+          {row}
+        </button>
+      ) : (
+        <div className={`diffNodeRow ${typeClass}`} style={{ paddingLeft: `${12 + indent}px` }}>
+          {row}
+        </div>
+      )}
       {isExpanded &&
         node.children?.map((child) => (
           <DiffTreeNode
@@ -237,21 +245,4 @@ function DiffTreeNode({
         ))}
     </div>
   );
-}
-
-// ── Helpers ──────────────────────────────────────────────────
-
-function formatValue(val: unknown): string {
-  if (val === null) return "null";
-  if (val === undefined) return "undefined";
-  if (typeof val === "string") {
-    if (val.length > 80) return `"${val.slice(0, 80)}..."`;
-    return `"${val}"`;
-  }
-  if (typeof val === "object") {
-    const str = JSON.stringify(val);
-    if (str.length > 60) return str.slice(0, 60) + "...";
-    return str;
-  }
-  return String(val);
 }

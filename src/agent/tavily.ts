@@ -1,4 +1,6 @@
+import { fetchWithTimeout, UpstreamTimeoutError } from "./fetchTimeout";
 import type { Env } from "./nebius";
+import { redactSecrets } from "./redact";
 
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 
@@ -21,20 +23,39 @@ export async function tavilySearch(
     };
   }
 
-  const response = await fetchImpl(TAVILY_SEARCH_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      fetchImpl,
+      TAVILY_SEARCH_URL,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          search_depth: "basic",
+          max_results: 5,
+          include_answer: false,
+        }),
+      },
+      15_000,
+      signal,
+    );
+  } catch (error) {
+    if (!(error instanceof UpstreamTimeoutError)) throw error;
+    return {
+      provider: "tavily",
+      source: "tavily",
+      live_call: true,
+      configured: true,
       query,
-      search_depth: "basic",
-      max_results: 5,
-      include_answer: false,
-    }),
-    signal,
-  });
+      error: error.message,
+      results: [],
+    };
+  }
 
   const text = await response.text();
   if (!response.ok) {
@@ -44,7 +65,7 @@ export async function tavilySearch(
       live_call: true,
       configured: true,
       query,
-      error: `Tavily search failed (${response.status}): ${text.slice(0, 300)}`,
+      error: `Tavily search failed (${response.status}): ${redactSecrets(text).slice(0, 300)}`,
       results: [],
     };
   }

@@ -46,7 +46,7 @@ export function computeDiff(
       result.push({ key, type: "added", newValue: newV });
     } else if (!(key in newObj)) {
       result.push({ key, type: "removed", oldValue: oldV });
-    } else if (!deepEqual(oldV, newV)) {
+    } else if (!(shallowOnly ? shallowValueEqual(oldV, newV) : deepEqual(oldV, newV))) {
       if (!shallowOnly && isObject(oldV) && isObject(newV)) {
         const children = computeDiff(
           oldV as Record<string, unknown>,
@@ -111,6 +111,61 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 function isObject(val: unknown): val is object {
   return val !== null && typeof val === "object" && !Array.isArray(val);
+}
+
+/**
+ * Equality for the collapsed large-snapshot view.
+ * Arrays are compared by length and small objects one level deep, so a 550KB
+ * schema does not get a full structural walk on the main thread.
+ */
+function shallowValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return a === b;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length;
+  }
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const aKeys = Object.keys(aRecord);
+  const bKeys = Object.keys(bRecord);
+  if (aKeys.length !== bKeys.length) return false;
+  if (aKeys.length > 8) {
+    return aKeys.every((key) => Object.prototype.hasOwnProperty.call(bRecord, key));
+  }
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(bRecord, key)) return false;
+    if (!shallowValueEqual(aRecord[key], bRecord[key])) return false;
+  }
+  return true;
+}
+
+/** Short preview that does not serialize large strings, arrays, or objects. */
+export function formatPreview(val: unknown, budget = 80): string {
+  if (val === null) return "null";
+  if (val === undefined) return "undefined";
+  if (typeof val === "string") {
+    return val.length > budget ? `"${val.slice(0, budget)}…"` : `"${val}"`;
+  }
+  if (typeof val === "number" || typeof val === "boolean" || typeof val === "bigint") return String(val);
+  if (Array.isArray(val)) {
+    if (val.length > 8) return `Array(${val.length})`;
+    return `[${val.map((item) => formatPreview(item, 24)).join(", ")}]`;
+  }
+  if (typeof val === "object") {
+    const record = val as Record<string, unknown>;
+    const keys = Object.keys(record);
+    if (keys.length > 6) return `{${keys.length} keys}`;
+    const parts: string[] = [];
+    let size = 2;
+    for (const key of keys) {
+      const preview = formatPreview(record[key], 24);
+      size += key.length + preview.length + 4;
+      if (size > 120) return `{${keys.length} keys}`;
+      parts.push(`${key}: ${preview}`);
+    }
+    return `{${parts.join(", ")}}`;
+  }
+  return String(val);
 }
 
 /** Payloads above this size use top-level diff only until a node is expanded. */

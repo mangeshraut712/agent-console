@@ -104,6 +104,22 @@ describe("incident agent loop", () => {
     expect(steps[0]?.kind === "error" ? steps[0].message : "").toContain("NEBIUS_API_KEY");
   });
 
+  test("live mode rejects a metadata base URL before calling fetch", async () => {
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw new Error("metadata address was fetched");
+    };
+    const steps = await collect(
+      runInvestigation(
+        { incidentId: "checkout-latency", alert: "checkout is slow", mode: "live" },
+        { env: { NEBIUS_API_KEY: "live-key", NEBIUS_BASE_URL: "http://169.254.169.254/" }, fetchImpl },
+      ),
+    );
+    expect(calls).toBe(0);
+    expect(steps[0]).toMatchObject({ kind: "error", code: "INVALID_NEBIUS_BASE_URL" });
+  });
+
   test("live mode plans with Nemotron, runs tools, and feeds results back", async () => {
     const requests: Array<{ url: string; auth: string; body: Record<string, unknown> }> = [];
     const script = [

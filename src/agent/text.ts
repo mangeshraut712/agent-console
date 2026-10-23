@@ -20,17 +20,26 @@ export function chunkText(text: string, size = 72): string[] {
 }
 
 export function extractVerdict(content: string): { narrative: string; verdict: Verdict | null } {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(content);
-  const candidate = fenced?.[1]?.trim() || findLastJsonObject(content);
-  if (!candidate) return { narrative: content.trim(), verdict: null };
-  try {
-    const verdict = coerceVerdict(JSON.parse(candidate) as unknown);
-    if (!verdict) return { narrative: content.trim(), verdict: null };
-    const narrative = (fenced ? content.replace(fenced[0], "") : content.replace(candidate, "")).trim();
+  const fences = [...content.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  for (let index = fences.length - 1; index >= 0; index -= 1) {
+    const fence = fences[index]!;
+    const verdict = verdictFromText((fence[1] ?? "").trim());
+    if (!verdict) continue;
+    const start = fence.index ?? 0;
+    const narrative = `${content.slice(0, start)}${content.slice(start + fence[0].length)}`.trim();
     return { narrative, verdict };
-  } catch {
-    return { narrative: content.trim(), verdict: null };
   }
+
+  const objects = topLevelJsonObjects(content);
+  for (let index = objects.length - 1; index >= 0; index -= 1) {
+    const span = objects[index]!;
+    const verdict = verdictFromText(span.text);
+    if (!verdict) continue;
+    const narrative = `${content.slice(0, span.start)}${content.slice(span.end)}`.trim();
+    return { narrative, verdict };
+  }
+
+  return { narrative: content.trim(), verdict: null };
 }
 
 export function coerceVerdict(value: unknown): Verdict | null {
@@ -57,11 +66,56 @@ export function coerceVerdict(value: unknown): Verdict | null {
   };
 }
 
-function findLastJsonObject(content: string): string | null {
-  const start = content.lastIndexOf("{");
-  const end = content.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  return content.slice(start, end + 1);
+function verdictFromText(text: string): Verdict | null {
+  try {
+    return coerceVerdict(JSON.parse(text) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+interface JsonSpan {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** Balanced top-level `{...}` spans, ignoring braces that sit inside strings. */
+function topLevelJsonObjects(content: string): JsonSpan[] {
+  const spans: JsonSpan[] = [];
+  let inString = false;
+  let escape = false;
+  const starts: number[] = [];
+  for (let index = 0; index < content.length; index += 1) {
+    const ch = content[index]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      starts.push(index);
+      continue;
+    }
+    if (ch === "}" && starts.length > 0) {
+      const start = starts.pop()!;
+      if (starts.length === 0) {
+        spans.push({ start, end: index + 1, text: content.slice(start, index + 1) });
+      }
+    }
+  }
+  return spans;
 }
 
 function stringField(value: unknown): string {

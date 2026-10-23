@@ -1,3 +1,5 @@
+import { matchesKeyword } from "@/lib/keywords";
+
 export const TOOL_NAMES = [
   "lookup_service_health",
   "search_logs",
@@ -79,18 +81,36 @@ export function getIncident(id: string | null | undefined): Incident | null {
   return INCIDENTS.find((incident) => incident.id === id) ?? null;
 }
 
+const INCIDENT_SIGNALS: Record<string, readonly string[]> = {
+  "checkout-latency": ["payments-7f3c", "payments-db", "checkout"],
+  "auth-5xx": ["identity-gateway", "oauth", "identity", "login"],
+  "queue-lag": ["order-events", "consumer lag", "poison", "queue", "lag"],
+};
+
 export function matchIncidentId(text: string): string | null {
   const haystack = text.toLowerCase();
   const explicit = INCIDENTS.find((incident) => haystack.includes(incident.id));
   if (explicit) return explicit.id;
-  if (haystack.includes("checkout") || haystack.includes("payments-db")) return "checkout-latency";
-  if (haystack.includes("identity") || haystack.includes("login") || haystack.includes("oauth")) {
-    return "auth-5xx";
+
+  let bestId: string | null = null;
+  let bestScore = 0;
+  let bestLength = 0;
+  for (const incident of INCIDENTS) {
+    const signals = INCIDENT_SIGNALS[incident.id] ?? [];
+    let score = 0;
+    let length = 0;
+    for (const signal of signals) {
+      if (!matchesKeyword(haystack, signal)) continue;
+      score += 1;
+      length += signal.length;
+    }
+    if (score > bestScore || (score === bestScore && score > 0 && length > bestLength)) {
+      bestId = incident.id;
+      bestScore = score;
+      bestLength = length;
+    }
   }
-  if (haystack.includes("queue") || haystack.includes("order-events") || haystack.includes("lag")) {
-    return "queue-lag";
-  }
-  return null;
+  return bestScore > 0 ? bestId : null;
 }
 
 export function unknownIncidentMessage(): string {
@@ -335,6 +355,9 @@ export function searchLogs(
   if (!service || !query) {
     return { source: "northwind-seed", error: "service and query are required" };
   }
+  if (query.length < 2) {
+    return { source: "northwind-seed", error: "query must be at least 2 characters" };
+  }
   if (!isKnownService(service)) {
     return {
       source: "northwind-seed",
@@ -344,9 +367,7 @@ export function searchLogs(
     };
   }
   const rows = (LOGS[incidentId] ?? []).filter((row) => row.service === service);
-  const matches = rows.filter(
-    (row) => row.message.toLowerCase().includes(query) || row.terms.some((term) => term.includes(query) || query.includes(term)),
-  );
+  const matches = rows.filter((row) => logMatchesQuery(row, query));
   return {
     source: "northwind-seed",
     note: SEED_NOTE,
@@ -412,6 +433,14 @@ function normalizeService(value: unknown): string {
 
 function isKnownService(service: string): boolean {
   return (KNOWN_SERVICES as readonly string[]).includes(service);
+}
+
+function logMatchesQuery(row: LogRow, query: string): boolean {
+  const message = row.message.toLowerCase();
+  if (matchesKeyword(message, query) || (query.length >= 3 && message.includes(query))) return true;
+  return row.terms.some(
+    (term) => matchesKeyword(query, term) || (query.length >= 3 && term.includes(query)),
+  );
 }
 
 function indexedTerms(rows: LogRow[]): string {

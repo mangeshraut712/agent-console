@@ -65,50 +65,58 @@ const TraceRow = forwardRef<
   return (
     <div
       ref={ref}
-      role="button"
-      tabIndex={0}
-      aria-label={`${type} event ${seq}: ${label}`}
       className={`traceRow ${isHighlighted ? "traceRowHighlighted" : ""} ${linked ? "traceRowLinked" : ""}`}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          activate();
-        }
-      }}
     >
-      <span className="traceEventDot" style={{ backgroundColor: color }} aria-hidden="true">
-        {icon}
-      </span>
-      <div className="traceEventBody">
-        <div className="traceEventHeader">
-          <span className="traceEventType" style={{ color }}>
-            {type}
+      <button
+        type="button"
+        className="traceRowButton"
+        aria-label={`${type} event ${seq}: ${label}`}
+        aria-expanded={hasExpandableDetail ? expanded : undefined}
+        onClick={activate}
+      >
+        <span className="traceEventDot" style={{ backgroundColor: color }} aria-hidden="true">
+          {icon}
+        </span>
+        <span className="traceEventBody">
+          <span className="traceEventHeader">
+            <span className="traceEventType" style={{ color }}>
+              {type}
+            </span>
+            <span className="traceEventSeq">#{seq}</span>
           </span>
-          <span className="traceEventSeq">#{seq}</span>
-        </div>
-        <span className="traceEventText">{label}</span>
-        {detail && (
-          <span className={`traceEventDetail ${expanded ? "traceEventDetailExpanded" : ""}`}>
-            {expanded || !hasExpandableDetail ? detail : `${detail.slice(0, 120)}${detail.length > 120 ? "…" : ""}`}
-          </span>
-        )}
-        {hasExpandableDetail && (
-          <button
-            type="button"
-            className="traceExpandBtn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleExpand?.();
-            }}
-          >
-            {expanded ? "Collapse" : "Expand full text"}
-          </button>
-        )}
-      </div>
+          <span className="traceEventText">{label}</span>
+          {detail && (
+            <span className={`traceEventDetail ${expanded ? "traceEventDetailExpanded" : ""}`}>
+              {expanded || !hasExpandableDetail ? detail : `${detail.slice(0, 120)}${detail.length > 120 ? "…" : ""}`}
+            </span>
+          )}
+        </span>
+      </button>
+      {hasExpandableDetail && (
+        <button
+          type="button"
+          className="traceExpandBtn"
+          aria-expanded={expanded}
+          onClick={() => onToggleExpand?.()}
+        >
+          {expanded ? "Collapse" : "Expand full text"}
+        </button>
+      )}
     </div>
   );
 });
+
+function eventHaystack(evt: TraceEvent): string {
+  if (evt.type === "CONTEXT_SNAPSHOT") {
+    return `context_id: ${String(evt.data.context_id ?? "")}`;
+  }
+  try {
+    const serialized = JSON.stringify(evt.data);
+    return serialized.length > 2_000 ? serialized.slice(0, 2_000) : serialized;
+  } catch {
+    return evt.type;
+  }
+}
 
 function getEventLabel(evt: TraceEvent): string {
   switch (evt.type) {
@@ -235,6 +243,13 @@ export function TraceTimeline({
   const matchesSearch = (payload: string) =>
     !searchQuery || payload.toLowerCase().includes(searchQuery.toLowerCase());
 
+  const visibleItems = displayItems.filter((item) => {
+    if (item.kind === "batch") {
+      return matchesFilter("TOKEN") && matchesSearch(item.batch.combinedText);
+    }
+    return matchesFilter(item.event.type) && matchesSearch(eventHaystack(item.event));
+  });
+
   return (
     <article className="card panelCard traceCard">
       <header className="cardHeader">
@@ -269,12 +284,8 @@ export function TraceTimeline({
       </div>
 
       <div className="traceList" ref={listRef}>
-        {displayItems.map((item) => {
+        {visibleItems.map((item) => {
           if (item.kind === "batch") {
-            if (!matchesFilter("TOKEN")) return null;
-            const searchPayload = item.batch.combinedText;
-            if (!matchesSearch(searchPayload)) return null;
-
             const expanded = expandedBatches.has(item.batch.id);
             return (
               <TraceRow
@@ -301,9 +312,6 @@ export function TraceTimeline({
           }
 
           const evt = item.event;
-          if (!matchesFilter(evt.type)) return null;
-          if (!matchesSearch(JSON.stringify(evt.data))) return null;
-
           const linked =
             (evt.type === "TOOL_CALL" || evt.type === "TOOL_RESULT") &&
             Boolean(evt.call_id && toolCallIds.has(evt.call_id));
@@ -324,8 +332,11 @@ export function TraceTimeline({
             />
           );
         })}
-        {displayItems.length === 0 && (
+        {events.length === 0 && (
           <div className="traceEmpty">No events yet. Send a message to the agent.</div>
+        )}
+        {events.length > 0 && visibleItems.length === 0 && (
+          <div className="traceEmpty">No events match this filter.</div>
         )}
       </div>
     </article>

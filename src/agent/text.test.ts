@@ -31,6 +31,22 @@ describe("verdict text", () => {
     expect(bare.narrative).toContain("Operator note");
   });
 
+  test("reads a nested verdict object and skips an earlier non-verdict fence", () => {
+    const nested = extractVerdict(
+      `Cause is upstream.\n${JSON.stringify({ ...VERDICT, notes: { source: "runbook", braces: "{}" } })}`,
+    );
+    expect(nested.verdict).toEqual(VERDICT);
+    expect(nested.narrative).toContain("Cause is upstream.");
+    expect(nested.narrative).not.toContain("likely_cause");
+
+    const fenced = extractVerdict(
+      `Intro\n\`\`\`\nnot json\n\`\`\`\nLater.\n\`\`\`json\n${JSON.stringify(VERDICT)}\n\`\`\``,
+    );
+    expect(fenced.verdict).toEqual(VERDICT);
+    expect(fenced.narrative).toContain("Intro");
+    expect(fenced.narrative).toContain("Later.");
+  });
+
   test("keeps the narrative when the verdict is missing, invalid, or incomplete", () => {
     expect(extractVerdict("No JSON here.").verdict).toBeNull();
     expect(extractVerdict("prefix {not json}").verdict).toBeNull();

@@ -31,8 +31,7 @@ export function ToolCard({
 
   const hasResult = toolCall.result !== null;
 
-  const handleCopy = async (e: React.MouseEvent, label: string, data: unknown) => {
-    e.stopPropagation();
+  const handleCopy = async (_event: React.MouseEvent, label: string, data: unknown) => {
     const ok = await copyText(JSON.stringify(data, null, 2));
     if (ok) {
       setCopied(label);
@@ -43,16 +42,6 @@ export function ToolCard({
   return (
     <div
       className={`toolCard ${hasResult ? "toolCardResult" : "toolCardPending"} ${isHighlighted ? "toolCardHighlighted" : ""}`}
-      onClick={() => onHighlight?.(toolCall.traceEventId)}
-      role="button"
-      tabIndex={0}
-      aria-label={`Tool ${toolCall.tool_name}, ${hasResult ? "complete" : "running"}`}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onHighlight?.(toolCall.traceEventId);
-        }
-      }}
     >
       <div className="toolCardHeader">
         <span className="toolCardIcon" aria-hidden="true">
@@ -60,6 +49,14 @@ export function ToolCard({
         </span>
         <span className="toolCardName">{toolCall.tool_name}</span>
         <span className="toolCardStatus">{hasResult ? "Complete" : "Running…"}</span>
+        <button
+          type="button"
+          className="toolCopyBtn"
+          onClick={() => onHighlight?.(toolCall.traceEventId)}
+          aria-label={`Show ${toolCall.tool_name} in the trace`}
+        >
+          Trace
+        </button>
       </div>
       <div className="toolCardSection">
         <div className="toolCardSectionHead">
@@ -67,6 +64,7 @@ export function ToolCard({
           <button
             type="button"
             className="toolCopyBtn"
+            aria-label={`Copy arguments for ${toolCall.tool_name}`}
             onClick={(e) => handleCopy(e, "args", toolCall.args)}
           >
             {copied === "args" ? "Copied" : "Copy"}
@@ -81,6 +79,7 @@ export function ToolCard({
             <button
               type="button"
               className="toolCopyBtn"
+              aria-label={`Copy result for ${toolCall.tool_name}`}
               onClick={(e) => handleCopy(e, "result", toolCall.result)}
             >
               {copied === "result" ? "Copied" : "Copy"}

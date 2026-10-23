@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ConversationMessage } from "@/lib/types";
 import { ToolCard } from "./ToolCard";
 
@@ -25,8 +25,14 @@ export function ChatPanel({
 }) {
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const hintId = useId();
   const isConnected =
     connectionStatus === "connected" || connectionStatus === "resuming";
+  const streaming = messages.some((message) => message.isStreaming);
+  const announcement =
+    streaming || !messages.some((message) => message.role === "assistant")
+      ? ""
+      : "Agent response finished.";
 
   useEffect(() => {
     if (listRef.current) {
@@ -61,7 +67,10 @@ export function ChatPanel({
         </span>
       </header>
 
-      <div className="messageList" ref={listRef} role="log" aria-live="polite" aria-relevant="additions text">
+      <div className="srOnly" aria-live="polite">
+        {announcement}
+      </div>
+      <div className="messageList" ref={listRef} role="log" aria-live="off" aria-busy={streaming}>
         {messages.length === 0 && (
           <div className="emptyState">
             <p>{emptyHint}</p>
@@ -81,6 +90,7 @@ export function ChatPanel({
       <form className="composer" onSubmit={handleSubmit}>
         <textarea
           aria-label="Type a message"
+          aria-describedby={hintId}
           placeholder={
             placeholder ??
             (isConnected ? "Type a message for the agent..." : "Connect to the server to start...")
@@ -95,6 +105,9 @@ export function ChatPanel({
           }}
           disabled={!isConnected}
         />
+        <span id={hintId} className="srOnly">
+          Press Enter to send. Press Shift+Enter for a new line.
+        </span>
         <button type="submit" disabled={!isConnected || !draft.trim()}>
           Send
         </button>
@@ -156,7 +169,9 @@ function MessageBubble({
         </div>
       )}
       {message.isStreaming && !message.text && message.toolCalls.length === 0 && (
-        <span className="streamingCursor">▊</span>
+        <span className="streamingCursor" aria-hidden="true">
+          ▊
+        </span>
       )}
     </div>
   );
@@ -181,7 +196,11 @@ function StreamingText({
   return (
     <span className="streamingText">
       {text}
-      {isStreaming && <span className="streamingCursor">▊</span>}
+      {isStreaming && (
+        <span className="streamingCursor" aria-hidden="true">
+          ▊
+        </span>
+      )}
     </span>
   );
 }
