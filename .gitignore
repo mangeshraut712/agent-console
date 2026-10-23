@@ -44,3 +44,7 @@ docs/videos/
 
 # Temporary stash used by the GitHub Pages export
 .api-stash/
+
+# Local agent tooling
+.agents/
+skills-lock.json
