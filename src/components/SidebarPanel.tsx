@@ -5,11 +5,13 @@ import { useState, type ReactNode } from "react";
 export function SidebarPanel({
   trace,
   context,
+  score,
 }: {
   trace: ReactNode;
   context: ReactNode;
+  score?: ReactNode;
 }) {
-  const [tab, setTab] = useState<"trace" | "context">("trace");
+  const [tab, setTab] = useState<"trace" | "context" | "score">("trace");
 
   return (
     <div className="sidebarPanel">
@@ -36,6 +38,19 @@ export function SidebarPanel({
         >
           Context
         </button>
+        {score ? (
+          <button
+            type="button"
+            role="tab"
+            id="tab-score"
+            aria-selected={tab === "score"}
+            aria-controls="panel-score"
+            className={tab === "score" ? "sidebarTab sidebarTabActive" : "sidebarTab"}
+            onClick={() => setTab("score")}
+          >
+            Score
+          </button>
+        ) : null}
       </div>
       <div
         id="panel-trace"
@@ -55,6 +70,17 @@ export function SidebarPanel({
       >
         {context}
       </div>
+      {score ? (
+        <div
+          id="panel-score"
+          role="tabpanel"
+          aria-labelledby="tab-score"
+          hidden={tab !== "score"}
+          className="sidebarTabPanel"
+        >
+          {score}
+        </div>
+      ) : null}
     </div>
   );
 }

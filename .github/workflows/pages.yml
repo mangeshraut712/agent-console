@@ -45,11 +45,7 @@ jobs:
         run: npm ci
 
       - name: Static export (demo mode)
-        run: npm run build
-        env:
-          GITHUB_PAGES: "true"
-          NEXT_PUBLIC_DEMO_MODE: "true"
-          NEXT_PUBLIC_WS_URL: "demo://agent"
+        run: npm run build:pages
 
       - name: Prepare Pages artifact
         run: touch out/.nojekyll
