@@ -22,8 +22,8 @@ async function readMessages(content: string): Promise<Array<Record<string, unkno
   const text = await response.text();
   return text
     .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
+    .filter((line: string) => line.trim().length > 0)
+    .map((line: string) => JSON.parse(line) as Record<string, unknown>);
 }
 
 describe("investigate route failures", () => {

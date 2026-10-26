@@ -39,6 +39,9 @@
   ],
   "exclude": [
     "node_modules",
-    "agent-server"
+    "agent-server",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
   ]
 }
