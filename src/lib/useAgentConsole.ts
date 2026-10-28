@@ -219,6 +219,10 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
     if (currentStreamRef.current?.streamId === msg.stream_id) {
       currentStreamRef.current = null;
     }
+
+    if (wsRef.current instanceof WebSocketManager) {
+      wsRef.current.markStreamComplete();
+    }
   }, []);
 
   const appendTraceEvent = useCallback((event: TraceEvent) => {
@@ -347,7 +351,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
           setStatus("connecting");
           break;
         case "open":
-          if (ws.getProcessedSeq() === 0) {
+          if (ws.getProcessedSeq() === 0 && !isResumingRef.current) {
             setStatus("connected");
           }
           break;

@@ -49,6 +49,7 @@ export class WebSocketManager {
   private pongCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   private processedSeq: number = 0;
+  private streamInProgress: boolean = false;
   private status: ConnectionStatus = "disconnected";
 
   constructor(url: string = DEFAULT_WS_URL) {
@@ -71,6 +72,7 @@ export class WebSocketManager {
 
   disconnect(): void {
     this.shouldReconnect = false;
+    this.streamInProgress = false;
     this.cleanup();
     this.status = "disconnected";
     this.reconnectAttempts = 0;
@@ -78,6 +80,9 @@ export class WebSocketManager {
 
   send(msg: ClientMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      if (msg.type === "USER_MESSAGE") {
+        this.streamInProgress = true;
+      }
       this.ws.send(JSON.stringify(msg));
     }
   }
@@ -108,12 +113,19 @@ export class WebSocketManager {
     return this.reconnectAttempts;
   }
 
-  sendResume(): void {
-    if (this.processedSeq > 0) {
-      this.status = "resuming";
-      this.emit({ type: "resuming" });
-      this.send({ type: "RESUME", last_seq: this.processedSeq });
-    }
+  /**
+   * The UI calls this only after an ordered STREAM_END has been rendered.
+   * A raw terminal frame can still be buffered behind a sequence gap and must
+   * not suppress a reconnect replay.
+   */
+  markStreamComplete(): void {
+    this.streamInProgress = false;
+  }
+
+  private sendResume(): void {
+    this.status = "resuming";
+    this.emit({ type: "resuming" });
+    this.send({ type: "RESUME", last_seq: this.processedSeq });
   }
 
   private createConnection(): void {
@@ -131,7 +143,7 @@ export class WebSocketManager {
       this.lastChallenge = null;
       this.startPongCheck();
 
-      if (this.processedSeq > 0) {
+      if (this.streamInProgress) {
         this.sendResume();
       } else {
         this.status = "connected";
