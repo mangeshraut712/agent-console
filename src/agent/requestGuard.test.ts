@@ -30,6 +30,16 @@ describe("investigation request guard", () => {
     });
     expect(rejectInvestigationRequest(jsonForeign, "{}")?.status).toBe(403);
 
+    const schemeMismatch = new Request("https://desk.example.test/api/investigate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://desk.example.test",
+      },
+      body: "{}",
+    });
+    expect(rejectInvestigationRequest(schemeMismatch, "{}")?.status).toBe(403);
+
     const loopback = new Request("http://localhost:3000/api/investigate", {
       method: "POST",
       headers: {

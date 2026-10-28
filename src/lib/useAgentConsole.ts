@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { WebSocketManager } from "./websocketManager";
 import { DemoAgentManager } from "./demoAgent";
 import { DeskAgentManager } from "./deskAgent";
-import { ReorderBuffer } from "./reorderBuffer";
+import { acceptOrderedMessages, ReorderBuffer } from "./reorderBuffer";
 import { createFlushScheduler } from "./flushScheduler";
 import { markToolAckSent, resetToolAckRegistry } from "./toolAckRegistry";
 import {
@@ -380,14 +380,9 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
           break;
         case "message":
           if (event.message) {
-            const ordered = reorderBufRef.current.accept(event.message);
+            const ordered = acceptOrderedMessages(reorderBufRef.current, event.message);
             for (const orderedMsg of ordered) {
               processMessage(orderedMsg);
-            }
-            if (event.message.type === "STREAM_END") {
-              for (const late of reorderBufRef.current.flush()) {
-                processMessage(late);
-              }
             }
             scheduleFlush();
           }
