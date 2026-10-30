@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, test, expect, beforeEach } from "vitest";
-import { ReorderBuffer } from "../reorderBuffer";
+import { acceptOrderedMessages, ReorderBuffer } from "../reorderBuffer";
 import type { ServerMessage } from "../types";
 
 function token(seq: number, text: string = ""): ServerMessage {
@@ -19,6 +19,14 @@ function toolCall(seq: number, callId: string = "tc_1"): ServerMessage {
 
 function context(seq: number): ServerMessage {
   return { type: "CONTEXT_SNAPSHOT", seq, context_id: "ctx_1", data: {} };
+}
+
+function streamEnd(seq: number): ServerMessage {
+  return { type: "STREAM_END", seq, stream_id: "s1" };
+}
+
+function ping(seq: number): ServerMessage {
+  return { type: "PING", seq, challenge: "challenge" };
 }
 
 describe("ReorderBuffer", () => {
@@ -150,6 +158,26 @@ describe("ReorderBuffer", () => {
       buf.accept(token(3));
       const flushed = buf.flush();
       expect(flushed.map((m) => m.seq)).toEqual([3]);
+    });
+  });
+
+  describe("stream completion", () => {
+    test("does not force-flush a raw stream end ahead of a missing sequence", () => {
+      const events = new ReorderBuffer();
+
+      expect(acceptOrderedMessages(events, token(2))).toEqual([]);
+      expect(acceptOrderedMessages(events, streamEnd(3))).toEqual([]);
+      expect(acceptOrderedMessages(events, token(1)).map((message) => message.seq)).toEqual([1, 2, 3]);
+    });
+
+    test("does not force-flush later events after an in-order stream end", () => {
+      const events = new ReorderBuffer();
+
+      expect(acceptOrderedMessages(events, token(2))).toEqual([]);
+      expect(acceptOrderedMessages(events, ping(5))).toEqual([]);
+      expect(acceptOrderedMessages(events, token(1)).map((message) => message.seq)).toEqual([1, 2]);
+      expect(acceptOrderedMessages(events, streamEnd(3)).map((message) => message.seq)).toEqual([3]);
+      expect(acceptOrderedMessages(events, ping(4)).map((message) => message.seq)).toEqual([4, 5]);
     });
   });
 
