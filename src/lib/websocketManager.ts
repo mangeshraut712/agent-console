@@ -50,6 +50,7 @@ export class WebSocketManager {
 
   private processedSeq: number = 0;
   private streamInProgress: boolean = false;
+  private activeStreamId: string | null = null;
   private status: ConnectionStatus = "disconnected";
 
   constructor(url: string = DEFAULT_WS_URL) {
@@ -73,6 +74,7 @@ export class WebSocketManager {
   disconnect(): void {
     this.shouldReconnect = false;
     this.streamInProgress = false;
+    this.activeStreamId = null;
     this.cleanup();
     this.status = "disconnected";
     this.reconnectAttempts = 0;
@@ -82,6 +84,7 @@ export class WebSocketManager {
     if (this.ws?.readyState === WebSocket.OPEN) {
       if (msg.type === "USER_MESSAGE") {
         this.streamInProgress = true;
+        this.activeStreamId = null;
       }
       this.ws.send(JSON.stringify(msg));
     }
@@ -113,13 +116,30 @@ export class WebSocketManager {
     return this.reconnectAttempts;
   }
 
+  /** Bind the locally pending request to its first ordered server stream. */
+  markStreamActive(streamId: string): boolean {
+    if (!this.streamInProgress) return false;
+    if (this.activeStreamId && this.activeStreamId !== streamId) return false;
+    this.activeStreamId = streamId;
+    return true;
+  }
+
   /**
-   * The UI calls this only after an ordered STREAM_END has been rendered.
-   * A raw terminal frame can still be buffered behind a sequence gap and must
-   * not suppress a reconnect replay.
+   * The UI calls this only after an ordered STREAM_END for the active stream
+   * has been rendered. A delayed terminal frame from another stream must not
+   * suppress a reconnect replay.
    */
-  markStreamComplete(): void {
+  markStreamComplete(streamId: string): boolean {
+    if (this.activeStreamId !== streamId) return false;
     this.streamInProgress = false;
+    this.activeStreamId = null;
+    return true;
+  }
+
+  /** Stop waiting for a stream after the UI has surfaced a retryable failure. */
+  abandonStream(): void {
+    this.streamInProgress = false;
+    this.activeStreamId = null;
   }
 
   private sendResume(): void {

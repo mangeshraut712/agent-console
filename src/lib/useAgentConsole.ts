@@ -8,6 +8,11 @@ import { acceptOrderedMessages, ReorderBuffer } from "./reorderBuffer";
 import { createFlushScheduler } from "./flushScheduler";
 import { markToolAckSent, resetToolAckRegistry } from "./toolAckRegistry";
 import {
+  abandonUnconfirmedStream,
+  completeActiveStream,
+  type ActiveAssistantStream,
+} from "./streamLifecycle";
+import {
   getStoredWsUrl,
   setStoredWsUrl,
   isValidWsUrl,
@@ -82,10 +87,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
     }
   }, []);
 
-  const currentStreamRef = useRef<{
-    streamId: string;
-    messageIdx: number;
-  } | null>(null);
+  const currentStreamRef = useRef<ActiveAssistantStream | null>(null);
 
   const flushState = useCallback(() => {
     setMessages(messagesRef.current.slice());
@@ -107,11 +109,18 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
   }, []);
 
   const ensureAssistantStream = useCallback(
-    (streamId: string): number => {
+    (streamId: string): number | null => {
       const msgs = messagesRef.current;
 
       if (currentStreamRef.current?.streamId === streamId) {
         return currentStreamRef.current.messageIdx;
+      }
+
+      if (
+        wsRef.current instanceof WebSocketManager &&
+        !wsRef.current.markStreamActive(streamId)
+      ) {
+        return null;
       }
 
       const existingIdx = msgs.findIndex(
@@ -140,6 +149,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
 
   const processToken = useCallback((msg: ServerMessage & { type: "TOKEN" }) => {
     const msgIdx = ensureAssistantStream(msg.stream_id);
+    if (msgIdx === null) return;
     const msgs = messagesRef.current;
     msgs[msgIdx] = {
       ...msgs[msgIdx]!,
@@ -150,6 +160,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
   const processToolCall = useCallback(
     (msg: ServerMessage & { type: "TOOL_CALL" }) => {
       const msgIdx = ensureAssistantStream(msg.stream_id);
+      if (msgIdx === null) return;
       const msgs = messagesRef.current;
       const traceEventId = traceIdForSeq(turnRef.current, msg.seq);
 
@@ -208,22 +219,36 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
     });
   }, []);
 
-  const processStreamEnd = useCallback((msg: ServerMessage & { type: "STREAM_END" }) => {
-    const msgs = messagesRef.current;
-    const msgIdx = currentStreamRef.current?.messageIdx ?? -1;
-
-    if (msgIdx >= 0 && msgIdx < msgs.length) {
-      msgs[msgIdx] = { ...msgs[msgIdx]!, isStreaming: false };
-    }
-
-    if (currentStreamRef.current?.streamId === msg.stream_id) {
-      currentStreamRef.current = null;
-    }
-
-    if (wsRef.current instanceof WebSocketManager) {
-      wsRef.current.markStreamComplete();
-    }
+  const processStreamEnd = useCallback((msg: ServerMessage & { type: "STREAM_END" }): boolean => {
+    const activeStream = currentStreamRef.current;
+    const manager = wsRef.current instanceof WebSocketManager ? wsRef.current : null;
+    currentStreamRef.current = completeActiveStream(
+      activeStream,
+      msg.stream_id,
+      messagesRef.current,
+      manager,
+    );
+    return activeStream !== null && currentStreamRef.current === null;
   }, []);
+
+  const finishResume = useCallback(() => {
+    isResumingRef.current = false;
+    clearResumeFallback();
+    setStatus("connected");
+  }, [clearResumeFallback]);
+
+  const failResume = useCallback((message: string) => {
+    currentStreamRef.current = abandonUnconfirmedStream(
+      currentStreamRef.current,
+      messagesRef.current,
+    );
+    if (wsRef.current instanceof WebSocketManager) {
+      wsRef.current.abandonStream();
+    }
+    flushSchedulerRef.current.flushNow();
+    setLastError(message);
+    finishResume();
+  }, [finishResume]);
 
   const appendTraceEvent = useCallback((event: TraceEvent) => {
     traceEventsRef.current.push(event);
@@ -232,6 +257,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
   const processMessage = useCallback(
     (msg: ServerMessage) => {
       markProcessedSeq(msg.seq);
+      let completedRecoveryStream = false;
 
       const traceEvent: TraceEvent = {
         id: traceIdForSeq(turnRef.current, msg.seq),
@@ -264,12 +290,16 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
           processContextSnapshot(msg);
           break;
         case "STREAM_END":
-          processStreamEnd(msg);
+          completedRecoveryStream = processStreamEnd(msg);
           break;
         case "PING":
           break;
         case "ERROR":
-          setLastError(`${msg.code}: ${msg.message}`);
+          if (isResumingRef.current) {
+            failResume(`${msg.code}: ${msg.message}`);
+          } else {
+            setLastError(`${msg.code}: ${msg.message}`);
+          }
           break;
         default: {
           const _exhaustive: never = msg;
@@ -277,10 +307,8 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
         }
       }
 
-      if (isResumingRef.current) {
-        isResumingRef.current = false;
-        clearResumeFallback();
-        setStatus("connected");
+      if (isResumingRef.current && completedRecoveryStream) {
+        finishResume();
       }
     },
     [
@@ -291,7 +319,8 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
       processToken,
       processToolCall,
       processToolResult,
-      clearResumeFallback,
+      failResume,
+      finishResume,
     ],
   );
 
@@ -361,8 +390,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
           clearResumeFallback();
           resumeFallbackRef.current = window.setTimeout(() => {
             if (isResumingRef.current) {
-              isResumingRef.current = false;
-              setStatus("connected");
+              failResume("Stream recovery could not be confirmed. Retry the request.");
             }
           }, 3000);
           break;
@@ -401,7 +429,7 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
     });
 
     ws.connect();
-  }, [appendTraceEvent, clearResumeFallback, processMessage, scheduleFlush, wsUrl]);
+  }, [appendTraceEvent, clearResumeFallback, failResume, processMessage, scheduleFlush, wsUrl]);
 
   const updateWsUrl = useCallback((url: string) => {
     setWsUrl(url);
