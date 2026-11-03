@@ -90,27 +90,30 @@ function sameOrigin(origin: string, request: Request): boolean {
   } catch {
     return false;
   }
-  const candidates = [request.headers.get("host"), hostOf(request.url)].filter(
+  const requestUrl = requestUrlOf(request.url);
+  if (!requestUrl) return false;
+  const candidates = [request.headers.get("host"), requestUrl.host].filter(
     (value): value is string => Boolean(value),
   );
-  return candidates.some((candidate) => hostsMatch(originUrl, candidate));
+  return candidates.some((candidate) => hostsMatch(originUrl, candidate, requestUrl.protocol));
 }
 
-function hostOf(requestUrl: string): string | null {
+function requestUrlOf(value: string): URL | null {
   try {
-    return new URL(requestUrl).host;
+    return new URL(value);
   } catch {
     return null;
   }
 }
 
-function hostsMatch(originUrl: URL, host: string): boolean {
+function hostsMatch(originUrl: URL, host: string, protocol: string): boolean {
   let hostUrl: URL;
   try {
-    hostUrl = new URL(`http://${host}`);
+    hostUrl = new URL(`${protocol}//${host}`);
   } catch {
     return false;
   }
+  if (originUrl.protocol !== hostUrl.protocol) return false;
   if (originUrl.host === hostUrl.host) return true;
   return (
     LOOPBACK_HOSTS.has(originUrl.hostname) &&

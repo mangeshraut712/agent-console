@@ -133,3 +133,15 @@ export class ReorderBuffer {
     return emitted;
   }
 }
+
+/**
+ * Accept one wire event without allowing a terminal frame to bypass an
+ * outstanding sequence gap. Keeping this policy alongside the buffer makes
+ * the completion rule testable independently of the React message handler.
+ */
+export function acceptOrderedMessages(
+  buffer: ReorderBuffer,
+  message: ServerMessage,
+): ServerMessage[] {
+  return buffer.accept(message);
+}

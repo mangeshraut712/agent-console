@@ -387,6 +387,11 @@ export class AgentServer {
             };
             await this.sendMessage(ws, callMsg);
 
+            // A TOOL_CALL creates a causal boundary: the stream cannot
+            // continue until the client has seen and acknowledged it. Do not
+            // leave it stranded in the chaos reorder buffer.
+            this.flushChaosBuffer(ws);
+
             // Wait for TOOL_ACK (with 5s timeout)
             await this.waitForAck(callId);
 
@@ -416,12 +421,7 @@ export class AgentServer {
       // Stream end
       if (!abort.signal.aborted && ws.readyState === WebSocket.OPEN) {
         // Flush any remaining chaos buffer
-        if (this.chaosEngine) {
-          const remaining = this.chaosEngine.flush();
-          for (const msg of remaining) {
-            this.rawSend(ws, msg);
-          }
-        }
+        this.flushChaosBuffer(ws);
 
         const endMsg: ServerMessage = {
           type: "STREAM_END",
@@ -429,6 +429,7 @@ export class AgentServer {
           stream_id: streamId,
         };
         await this.sendMessage(ws, endMsg);
+        this.flushChaosBuffer(ws);
       }
     } finally {
       this.isStreaming = false;
@@ -473,6 +474,13 @@ export class AgentServer {
   private rawSend(ws: WebSocket, message: ServerMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
+    }
+  }
+
+  private flushChaosBuffer(ws: WebSocket): void {
+    if (!this.chaosEngine) return;
+    for (const message of this.chaosEngine.flush()) {
+      this.rawSend(ws, message);
     }
   }
 
@@ -521,8 +529,6 @@ export class AgentServer {
         challenge,
       };
 
-      this.pendingPing = { challenge, sentAt: Date.now() };
-
       // Record in history
       this.eventHistory.push(pingMsg);
       this.rawSend(ws, pingMsg);
@@ -531,6 +537,16 @@ export class AgentServer {
         clearTimeout(this.pongTimeoutHandle);
         this.pongTimeoutHandle = null;
       }
+
+      // An empty challenge is intentionally malformed chaos input. Clients
+      // correctly ignore it, so it must not create an acknowledgement
+      // obligation or turn into a false PONG_TIMEOUT violation.
+      if (challenge === "") {
+        this.pendingPing = null;
+        return;
+      }
+
+      this.pendingPing = { challenge, sentAt: Date.now() };
       // Set a timeout for the PONG
       this.pongTimeoutHandle = setTimeout(() => {
         if (this.pendingPing && this.pendingPing.challenge === challenge) {
