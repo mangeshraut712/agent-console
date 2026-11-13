@@ -100,8 +100,8 @@ describe("incident agent loop", () => {
       ),
     );
     expect(steps).toHaveLength(1);
-    expect(steps[0]).toMatchObject({ kind: "error", code: "MISSING_NEBIUS_API_KEY" });
-    expect(steps[0]?.kind === "error" ? steps[0].message : "").toContain("NEBIUS_API_KEY");
+    expect(steps[0]).toMatchObject({ kind: "error", code: "MISSING_SARVAM_API_KEY" });
+    expect(steps[0]?.kind === "error" ? steps[0].message : "").toContain("SARVAM_API_KEY");
   });
 
   test("live mode rejects a metadata base URL before calling fetch", async () => {

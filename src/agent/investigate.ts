@@ -15,6 +15,9 @@ export async function* runInvestigation(
 
 export function serverEnv(): InvestigateDeps["env"] {
   return {
+    INCIDENT_PROVIDER: process.env.INCIDENT_PROVIDER,
+    SARVAM_API_KEY: process.env.SARVAM_API_KEY,
+    SARVAM_MODEL: process.env.SARVAM_MODEL,
     NEBIUS_API_KEY: process.env.NEBIUS_API_KEY,
     NEBIUS_BASE_URL: process.env.NEBIUS_BASE_URL,
     NEBIUS_MODEL: process.env.NEBIUS_MODEL,

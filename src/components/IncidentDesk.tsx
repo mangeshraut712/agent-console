@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_NEBIUS_BASE_URL, DEFAULT_NEMOTRON_MODEL, NEBIUS_PROVIDER } from "@/agent/constants";
+import { DEFAULT_SARVAM_MODEL, SARVAM_PROVIDER } from "@/agent/constants";
 import { INCIDENTS, type Incident } from "@/agent/incidents";
 import type { Verdict } from "@/agent/types";
 import { DESK_ENDPOINT } from "@/lib/config";
@@ -16,7 +16,9 @@ import { SidebarPanel } from "./SidebarPanel";
 import { VerdictCard } from "./VerdictCard";
 
 interface DeskHealth {
-  nebiusConfigured: boolean;
+  liveConfigured: boolean;
+  keyVariable?: string;
+  error?: string;
   tavilyConfigured: boolean;
   model: string;
   baseUrl: string;
@@ -68,9 +70,10 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
     };
   }, []);
 
-  const liveReady = Boolean(health?.nebiusConfigured) && !STATIC_DEMO;
-  const model = health?.model ?? DEFAULT_NEMOTRON_MODEL;
-  const baseUrl = health?.baseUrl ?? DEFAULT_NEBIUS_BASE_URL;
+  const liveReady = Boolean(health?.liveConfigured) && !STATIC_DEMO;
+  const model = health?.model ?? DEFAULT_SARVAM_MODEL;
+  const provider = health?.provider ?? SARVAM_PROVIDER;
+  const keyVariable = health?.keyVariable ?? "SARVAM_API_KEY";
   const connected = connection.status === "connected" || connection.status === "resuming";
 
   const incidentSnap = latestSnapshot(contextSnapshots, "incident");
@@ -120,16 +123,16 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
     <main className="shell">
       <section className="hero card">
         <div>
-          <p className="eyebrow">Northwind on-call · {NEBIUS_PROVIDER}</p>
+          <p className="eyebrow">Paytm Build for India · {provider}</p>
           <h1>Incident Desk</h1>
           <p className="lede">
-            An operator pastes a page, and NVIDIA Nemotron plans the investigation: which service to
+            An operator opens an alert, and the AI plans the investigation: which service to
             open, which logs to search, when to check the public web. The trace, the tool cards, and
             the scorecard stay on screen so you can see whether the conclusion is backed by evidence.
           </p>
           <p className="modelLine">
             <code>{model}</code>
-            <span> via {baseUrl}/chat/completions</span>
+            <span> via {provider} · Read-only investigation</span>
           </p>
         </div>
         <div className="deskStatus">
@@ -156,7 +159,7 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
           </label>
           <label
             className={runMode === "live" ? "modeOption modeOptionOn" : "modeOption"}
-            title={liveReady ? "Call Nemotron through Nebius Token Factory" : "Needs NEBIUS_API_KEY on the server"}
+            title={liveReady ? `Call ${provider} using the server key` : `Needs ${keyVariable} on the server`}
           >
             <input
               type="radio"
@@ -166,25 +169,25 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
               disabled={!liveReady}
               onChange={() => setRunMode("live")}
             />
-            Live Nemotron
+            Live {provider}
           </label>
         </div>
         <p className="muted deskHelp">
           {liveReady
-            ? "Live calls Nemotron with the server key. Telemetry is still the Northwind seed. Tavily runs only when TAVILY_API_KEY is set."
-            : "Replay is a recorded trace with seeded tool results. Nemotron is not called. Set NEBIUS_API_KEY on the server to enable Live."}
+            ? `Live calls ${provider}. A configured key does not guarantee credits. Health, logs and runbooks are seeded examples; a person makes any changes.`
+            : health?.error || `Replay is a recorded trace with seeded tool results. No model is called. Set ${keyVariable} on the server to enable Live.`}
           {health?.tavilyConfigured ? " Tavily is configured." : " Tavily is not configured."}
         </p>
       </section>
 
       {runModeActual === "replay" && (
         <div className="replayBanner" role="status">
-          Replay. This trace was recorded for the demo. Nemotron was not called.
+          Replay. This trace was recorded for the demo. No AI model was called.
         </div>
       )}
       {runModeActual === "live" && (
         <div className="liveBanner" role="status">
-          Live. {model} is planning through {NEBIUS_PROVIDER}. Service health and logs are the Northwind seed.
+          Live. {model} is planning through {provider}. Service health and logs are the Northwind seed.
         </div>
       )}
       {lastError && (
@@ -223,7 +226,7 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
         </div>
       </section>
 
-      <section className="grid">
+      <section className="grid deskGrid">
         <div className="deskMain">
           <PlannerCard
             step={typeof plannerSnap?.data.step === "number" ? plannerSnap.data.step : null}

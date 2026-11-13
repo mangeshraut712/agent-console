@@ -24,6 +24,9 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_WS_URL: ws://localhost:4747/ws
+      INCIDENT_PROVIDER: ${INCIDENT_PROVIDER:-sarvam}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      SARVAM_MODEL: ${SARVAM_MODEL:-}
       NEBIUS_API_KEY: ${NEBIUS_API_KEY:-}
       NEBIUS_BASE_URL: ${NEBIUS_BASE_URL:-}
       NEBIUS_MODEL: ${NEBIUS_MODEL:-}

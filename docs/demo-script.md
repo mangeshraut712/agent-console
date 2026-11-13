@@ -1,61 +1,67 @@
-# Demo script — under 3 minutes
+# Incident Desk — Paytm demo (under 3 minutes)
 
-Record the seeded replay. Say that out loud in the first shot. Do not switch to Live unless `NEBIUS_API_KEY` is set and you have already seen one successful live run. If you do show Live, say that the health and log numbers are still the Northwind seed.
+Use the **Replay** source throughout this rehearsal. The local Sarvam integration
+is implemented; a successful live run is still pending credits. The public
+GitHub Pages site ships the same replay UI without a server-side model call.
 
-Have the app running at http://localhost:3000 (`npm run dev` or `npm run deploy`). Leave the source on **Replay**. Use a desktop window wide enough to show the trace beside the conversation.
+## 0:00–0:20 — Problem and disclosure
 
-## Shot 1 — 0:00 to 0:18 — The desk
+“This is Incident Desk, an AI on-call teammate for checkout incidents. We have
+integrated Sarvam for the live investigation loop. Today I’m showing the recorded
+replay on seeded telemetry, clearly labelled on screen.”
 
-Show the Incident Desk header, the model id `nvidia/nemotron-3-super-120b-a12b`, and the base URL.
-
-Say: "This is Incident Desk. Nemotron is the planner for an on-call investigation. What you're about to see is the recorded replay, so we can run it with no API key. The banner will say Replay, and Nemotron is not being called."
-
-Point at the disabled Live control and the sentence that says the key is unset.
-
-## Shot 2 — 0:18 to 0:32 — Pick the checkout page
+## 0:20–0:40 — Open the checkout incident
 
 Click **Checkout p99 after payments-7f3c**.
 
-Say: "Checkout latency jumped in the same minute as deploy payments-7f3c. The agent has to decide where to look."
+“The alert is checkout p99 at 4.2 seconds, against an 800 millisecond SLO. It starts
+at the same time as a payments deployment. The operator needs a cause supported
+by evidence, not just a plausible paragraph.”
 
-## Shot 3 — 0:32 to 1:15 — Plan and tools
+## 0:40–1:25 — Plan and tools
 
-Keep the Planner card and the tool cards in frame. Pause when the first plan step is on screen, then when `lookup_service_health`, `search_logs`, and `read_runbook` complete.
+Show the Planner, then scroll the conversation to the tool results.
 
-Say: "The plan says it will read checkout-api and payments-db before the logs. The health card shows the database at 98 of 100 connections. The log card is the pool timeout, evidence id ev-checkout-pool. The runbook says to roll the pool back before adding API replicas."
+“The investigation checks checkout-api and payments-db, searches their logs,
+and reads the runbook. The seed shows 98 of 100 database connections in use.
+The logs link that saturation to a pool-size change in payments-7f3c.”
 
-Scroll the trace timeline enough to show those events as rows, not only as cards.
+## 1:25–1:55 — Verdict and scorecard
 
-## Shot 4 — 1:15 to 1:40 — Verdict and scorecard
+Show the Verdict and the six scorecard checks.
 
-When the verdict card appears, read the likely cause and the action in one sentence. Then show the scorecard at 6 of 6, or whatever it actually shows. Do not claim a number you cannot see.
+“The verdict recommends rolling the pool back to 20 and rechecking latency.
+It cites evidence IDs. These six checks compare the trace with this known
+fixture; they are not a production accuracy claim. Tools are read-only. An
+operator decides whether to act.”
 
-Say: "The verdict cites the seeded evidence ids, and the scorecard checks the tools, the cause, the evidence, and that it recommended an action. This is a check against the fixture, not a production accuracy rate."
+## 1:55–2:20 — Export and second scenario
 
-## Shot 5 — 1:40 to 2:10 — The auth incident and web search
+Click **Export trace**. Open the saved JSON if useful. Optionally click **Login
+500s from identity-gateway** and show the expired certificate evidence.
 
-Click **Login 500s from identity-gateway**. When `web_search` completes, open the result.
+“The export includes tool calls, evidence and a run snapshot marked replay.
+The login scenario also demonstrates web search. In replay that is a recorded
+example; Tavily is not called.”
 
-Say: "This one needs a public status page. In replay, web search is a recorded example. The payload says Tavily was not called. The log still has the expired certificate, ev-idp-cert."
+## 2:20–2:50 — Sarvam integration
 
-If you have `TAVILY_API_KEY` and a Nebius key and you already verified Live, you can cut to a second take here. Label it Live and say the status page is a real Tavily response. Skip that take otherwise.
+Show slide 4, or `src/agent/sarvam.ts` and `src/agent/loop.ts`. Do not open `.env`.
 
-## Shot 6 — 2:10 to 2:28 — Export
+“Live mode calls sarvam-105b-conversations from the server. Sarvam selects tools,
+receives their results and produces the verdict. The API key stays on the server.
+Provider errors stay visible and never silently switch to replay. The account’s
+credit allocation is pending with the organizers.”
 
-Click **Export trace**. Show the downloaded JSON for a moment: a `TOOL_CALL` and a context snapshot whose mode is `replay`.
+## 2:50–3:00 — Close
 
-Say: "The trace exports as JSON. The run snapshot says recorded trace, so a reviewer can tell this file apart from a live call."
+“Next, we’ll validate a live run and connect read-only telemetry, then measure
+time to a correct diagnosis. UPI and settlement-specific scenarios are planned.”
 
-## Shot 7 — 2:28 to 2:50 — Where the live call is
+## If something fails
 
-Switch to the editor, or a terminal, on `src/agent/nebius.ts` and `src/agent/constants.ts`. Show the model id and the `/chat/completions` path. If it is quick, also show the missing-key error string.
-
-Say: "The live path is a normal Token Factory chat completion. The model id is Nemotron 3 Super. The key is `NEBIUS_API_KEY` on the server. Until that is set, Live stays off and we stay on the labeled replay."
-
-## Shot 8 — 2:50 to 3:00 — Close
-
-Back on the desk. Leave the Replay banner in frame.
-
-Say: "Same three incidents, same evidence ids, once a key is in the environment. The scorecard is how we tell a live run apart from a lucky paragraph."
-
-Stop. Do not add a montage of the protocol console unless you have time to spare under the three minutes. If you do, one sentence is enough: the Protocol console link still speaks the original WebSocket protocol.
+- Network unavailable: use **Start Offline Demo.command** in the Patym folder.
+- Browser unavailable: show `hackathon-kit/checkout-replay.webm` if present, or the
+  screenshots under `hackathon-kit/evidence/`, explicitly labelled replay.
+- Credits remain unavailable: stay in Replay. Do not repeatedly retry Live on stage.
+- Short slot: demonstrate checkout only; skip the second scenario and source view.

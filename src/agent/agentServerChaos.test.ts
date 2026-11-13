@@ -12,11 +12,13 @@ type WritableSocket = {
 
 type InternalAgentServer = {
   chaosEngine: ChaosEngine | null;
+  activeWs: WritableSocket;
+  readyForStream: boolean;
   delay: (ms: number, signal?: AbortSignal) => Promise<void>;
   runScript: (ws: WritableSocket, script: ResponseScript) => Promise<void>;
   startHeartbeat: (ws: WritableSocket) => void;
   stopHeartbeat: () => void;
-  waitForAck: (callId: string) => Promise<void>;
+  waitForAck: (callId: string, deliver: () => Promise<void>) => Promise<void>;
   clientLog: Array<{ type: string; verdict?: string }>;
 };
 
@@ -44,6 +46,8 @@ function createChaosHarness(): {
     corruptPingProbability: 0,
   });
   internal.delay = async () => {};
+  internal.activeWs = ws;
+  internal.readyForStream = true;
 
   return { internal, sent, ws };
 }
@@ -51,7 +55,8 @@ function createChaosHarness(): {
 describe("AgentServer chaos delivery barriers", () => {
   it("delivers a chaos-buffered TOOL_CALL before it awaits its acknowledgment", async () => {
     const { internal, sent, ws } = createChaosHarness();
-    internal.waitForAck = async () => {
+    internal.waitForAck = async (_callId, deliver) => {
+      await deliver();
       expect(sent.map((message) => message.type)).toContain("TOOL_CALL");
     };
 

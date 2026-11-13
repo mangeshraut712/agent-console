@@ -23,6 +23,7 @@ export class AgentServer {
   private httpServer: http.Server;
   private wss: WebSocketServer;
   private activeWs: WebSocket | null = null;
+  private readyForStream = false;
 
   // ── Sequence & history ────────────────────────────────────
   private seq: number = 0;
@@ -42,7 +43,7 @@ export class AgentServer {
   private pongTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   // ── Tool ACK tracking ─────────────────────────────────────
-  private pendingAcks: Map<string, { resolve: () => void; timeout: ReturnType<typeof setTimeout> }> = new Map();
+  private pendingAcks: Map<string, { resolve: () => void; timeout: ReturnType<typeof setTimeout> | undefined }> = new Map();
 
   // ── Streaming state ───────────────────────────────────────
   private isStreaming: boolean = false;
@@ -143,7 +144,8 @@ export class AgentServer {
     }
 
     this.stopHeartbeat();
-    this.abortStream();
+    // Keep the script alive across transport loss; RESUME releases it after replay.
+    this.readyForStream = false;
     this.activeWs = ws;
     this.missedPongs = 0;
 
@@ -160,6 +162,7 @@ export class AgentServer {
       if (this.activeWs === ws) {
         this.stopHeartbeat();
         this.activeWs = null;
+        this.readyForStream = false;
       }
     });
     ws.on("error", (err) => {
@@ -253,6 +256,7 @@ export class AgentServer {
       return;
     }
 
+    this.readyForStream = true;
     this.logClient("USER_MESSAGE", { content: content.slice(0, 500) }, "ok");
     const script = selectScript(content);
     console.log(`[agent-server] Selected script: ${script.name} (${script.id})`);
@@ -278,12 +282,7 @@ export class AgentServer {
       this.rawSend(ws, msg);
     }
 
-    // If stream was in progress when connection dropped, resume it
-    // The abortStream() was called on disconnect, so the script
-    // stopped. We don't auto-resume the script — the replayed events
-    // give the client everything that was sent before the drop.
-    // For a real system you'd resume the script, but for this test
-    // server the replay is sufficient.
+    this.readyForStream = true;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -345,7 +344,7 @@ export class AgentServer {
     try {
       for (const event of script.events) {
         if (abort.signal.aborted) return;
-        if (ws.readyState !== WebSocket.OPEN) return;
+        ws = await this.waitForConnection(abort.signal);
 
         switch (event.kind) {
           case "context": {
@@ -355,7 +354,7 @@ export class AgentServer {
               context_id: event.context_id,
               data: event.data,
             };
-            await this.sendMessage(ws, msg);
+            await this.sendMessage(ws, msg, abort.signal);
             break;
           }
 
@@ -366,7 +365,7 @@ export class AgentServer {
               text: event.text,
               stream_id: streamId,
             };
-            await this.sendMessage(ws, msg);
+            await this.sendMessage(ws, msg, abort.signal);
             // Token delay: 30–80ms in normal, variable in chaos
             const baseDelay = 30 + Math.random() * 50;
             await this.delay(baseDelay, abort.signal);
@@ -385,21 +384,18 @@ export class AgentServer {
               args: event.args,
               stream_id: streamId,
             };
-            await this.sendMessage(ws, callMsg);
-
-            // A TOOL_CALL creates a causal boundary: the stream cannot
-            // continue until the client has seen and acknowledged it. Do not
-            // leave it stranded in the chaos reorder buffer.
-            this.flushChaosBuffer(ws);
-
-            // Wait for TOOL_ACK (with 5s timeout)
-            await this.waitForAck(callId);
+            // Register before delivery: a resumed or fast client can ACK immediately.
+            await this.waitForAck(callId, async () => {
+              await this.sendMessage(ws, callMsg, abort.signal);
+              ws = await this.waitForConnection(abort.signal);
+              this.flushChaosBuffer(ws);
+            });
 
             // Simulate tool execution delay
             await this.delay(800 + Math.random() * 1200, abort.signal);
 
             if (abort.signal.aborted) return;
-            if (ws.readyState !== WebSocket.OPEN) return;
+            ws = await this.waitForConnection(abort.signal);
 
             // Send TOOL_RESULT
             const resultMsg: ServerMessage = {
@@ -409,7 +405,7 @@ export class AgentServer {
               result: event.result,
               stream_id: streamId,
             };
-            await this.sendMessage(ws, resultMsg);
+            await this.sendMessage(ws, resultMsg, abort.signal);
 
             // Brief pause before resuming tokens
             await this.delay(200, abort.signal);
@@ -419,7 +415,8 @@ export class AgentServer {
       }
 
       // Stream end
-      if (!abort.signal.aborted && ws.readyState === WebSocket.OPEN) {
+      if (!abort.signal.aborted) {
+        ws = await this.waitForConnection(abort.signal);
         // Flush any remaining chaos buffer
         this.flushChaosBuffer(ws);
 
@@ -428,12 +425,15 @@ export class AgentServer {
           seq: this.nextSeq(),
           stream_id: streamId,
         };
-        await this.sendMessage(ws, endMsg);
+        await this.sendMessage(ws, endMsg, abort.signal);
+        ws = await this.waitForConnection(abort.signal);
         this.flushChaosBuffer(ws);
       }
     } finally {
-      this.isStreaming = false;
-      this.streamAbortController = null;
+      if (this.streamAbortController === abort) {
+        this.isStreaming = false;
+        this.streamAbortController = null;
+      }
     }
   }
 
@@ -441,7 +441,7 @@ export class AgentServer {
   // Message sending (with chaos if enabled)
   // ─────────────────────────────────────────────────────────
 
-  private async sendMessage(ws: WebSocket, message: ServerMessage): Promise<void> {
+  private async sendMessage(ws: WebSocket, message: ServerMessage, signal: AbortSignal): Promise<void> {
     if (ws.readyState !== WebSocket.OPEN) return;
 
     // Record in history (always the original, unchaoticised version)
@@ -452,6 +452,7 @@ export class AgentServer {
       if (this.chaosEngine.shouldDropConnection()) {
         console.log("[chaos] Dropping connection");
         ws.terminate();
+        await this.waitForConnection(signal);
         return;
       }
 
@@ -460,9 +461,11 @@ export class AgentServer {
 
       if (delayMs > 0) {
         console.log(`[chaos] Latency spike: ${Math.round(delayMs)}ms`);
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        await this.delay(delayMs, signal);
       }
 
+      // If this socket closed during latency, RESUME replays these history entries.
+      await this.waitForConnection(signal);
       for (const msg of messages) {
         this.rawSend(ws, msg);
       }
@@ -572,19 +575,34 @@ export class AgentServer {
   // Tool ACK waiting
   // ─────────────────────────────────────────────────────────
 
-  private waitForAck(callId: string): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        if (this.pendingAcks.has(callId)) {
-          console.log(`[agent-server] TOOL_ACK timeout for ${callId}`);
+  private waitForAck(callId: string, deliver: () => Promise<void>): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      // Arm only after delivery/replay, so injected network latency is not
+      // charged against the client's five-second acknowledgement window.
+      const entry = { resolve, timeout: undefined as ReturnType<typeof setTimeout> | undefined };
+      this.pendingAcks.set(callId, entry);
+      deliver().then(() => {
+        if (!this.pendingAcks.has(callId)) return;
+        entry.timeout = setTimeout(() => {
           this.logClient("TOOL_ACK_TIMEOUT", { call_id: callId }, "violation");
           this.pendingAcks.delete(callId);
           resolve();
-        }
-      }, 5000);
-
-      this.pendingAcks.set(callId, { resolve, timeout });
+        }, 5000);
+      }, error => {
+        this.pendingAcks.delete(callId);
+        reject(error);
+      });
     });
+  }
+
+  private async waitForConnection(signal: AbortSignal): Promise<WebSocket> {
+    const deadline = Date.now() + 90_000;
+    while (!this.readyForStream || this.activeWs?.readyState !== WebSocket.OPEN) {
+      if (Date.now() >= deadline) throw new Error("Client did not resume within 90 seconds.");
+      await this.delay(25, signal);
+    }
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    return this.activeWs;
   }
 
   // ─────────────────────────────────────────────────────────

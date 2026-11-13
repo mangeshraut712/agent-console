@@ -1,3 +1,4 @@
+import { providerStatus } from "./provider";
 import { matchIncidentId } from "./incidents";
 import type { Env } from "./nebius";
 import type { InvestigationRequest, RequestedMode } from "./types";
@@ -36,5 +37,5 @@ export function parseInvestigationContent(content: string): ParsedInvestigation 
 export function resolveMode(mode: RequestedMode, env: Env): InvestigationRequest["mode"] {
   if (mode === "live") return "live";
   if (mode === "replay") return "replay";
-  return env.NEBIUS_API_KEY?.trim() ? "live" : "replay";
+  return providerStatus(env).liveConfigured ? "live" : "replay";
 }

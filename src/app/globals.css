@@ -1330,3 +1330,25 @@ button.diffNodeRow {
     scroll-behavior: auto !important;
   }
 }
+/* Keep the complete evidence panels reachable without widening the desk grid. */
+.deskGrid > .sidebar {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  max-height: none;
+  overflow: visible;
+}
+
+.deskGrid .sidebarDesktop,
+.deskGrid .sidebarDesktop > *,
+.deskGrid .sidebarMobile,
+.deskGrid .evalRow > span:last-child {
+  min-width: 0;
+}
+
+.deskGrid .evalDetail {
+  overflow-wrap: anywhere;
+}
+
+.deskGrid .traceFilters {
+  flex-wrap: wrap;
+}

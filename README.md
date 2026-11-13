@@ -1,10 +1,10 @@
 # Incident Desk
 
-On-call investigation desk for a seeded checkout platform called Northwind. NVIDIA Nemotron, served by [Nebius Token Factory](https://docs.tokenfactory.nebius.com/api-reference/introduction), is the planner: it decides which service to open, which logs to search, when to read the runbook, and when to search the public web. Every plan step, tool call, and verdict stays on screen, and a scorecard checks the trace against the incident.
+On-call investigation desk for a seeded checkout platform called Northwind. Sarvam AI (`sarvam-105b-conversations`) is the Paytm hackathon planner: it decides which service to open, which logs to search, when to read the runbook, and when to search the public web. Every plan step, tool call, and verdict stays on screen, and a scorecard checks the trace against the incident.
 
 The same app still includes the original protocol console (streaming tokens, tool cards, reorder buffer, reconnect/RESUME) for any WebSocket agent backend.
 
-**Replay is the default.** A recorded trace runs with no API key and is labeled `Replay` on screen. Nemotron is not called on that path. Live mode appears only after `NEBIUS_API_KEY` is set on the server.
+**Replay is the default.** A recorded trace runs with no API key and is labeled `Replay` on screen. No model is called on that path. Live mode enables when the selected provider key is configured; credits are checked only when a live request is made.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ flowchart LR
   operator[Operator] --> desk[Incident Desk UI]
   desk -->|NDJSON protocol events| api["POST /api/investigate"]
   api --> loop["Agent loop src/agent/loop.ts"]
-  loop -->|chat completions| nemotron["Nebius Token Factory\nnvidia/nemotron-3-super-120b-a12b"]
+  loop -->|chat completions| nemotron["Sarvam AI\nsarvam-105b-conversations"]
   loop --> tools[Northwind tools]
   tools --> seed[Seeded health, logs, runbooks]
   tools --> tavily[Tavily search]
@@ -23,25 +23,33 @@ flowchart LR
 
 Telemetry for service health, logs, and runbooks is the Northwind seed in `src/agent/incidents.ts`. It is not a live production account. `web_search` calls Tavily only when `TAVILY_API_KEY` is set. In replay, that tool returns a recorded example and says Tavily was not called.
 
-## How Nemotron is called
+## Sarvam integration
 
-The live path is an OpenAI-compatible chat completion. Nemotron is the only model in the loop: it plans, chooses tools, reads the tool results, and writes the verdict.
+The server calls `https://api.sarvam.ai/v1/chat/completions` with the
+`api-subscription-key` header. Sarvam plans, selects read-only tools, receives their
+results, and writes the verdict. Keys never go into browser props or public variables.
 
-| Piece | Where |
-| --- | --- |
-| Model id `nvidia/nemotron-3-super-120b-a12b` and base URL `https://api.tokenfactory.nebius.com/v1` | `src/agent/constants.ts` |
-| `POST {baseUrl}/chat/completions` with `Authorization: Bearer $NEBIUS_API_KEY` | `src/agent/nebius.ts` |
-| Planner loop, tool results fed back as `role: "tool"` messages, reasoning stored on each step | `src/agent/loop.ts` |
-| Tool schemas, including `web_search` | `src/agent/tools.ts` |
-| Tavily `POST https://api.tavily.com/search` | `src/agent/tavily.ts` |
-| HTTP entry the desk streams | `src/app/api/investigate/route.ts` |
-| Key check used by the Live toggle | `src/app/api/health/route.ts` |
+- `src/agent/sarvam.ts`: Sarvam request and sanitized provider errors.
+- `src/agent/provider.ts`: provider selection and public configuration status.
+- `src/agent/loop.ts`: bounded tool loop and evidence-based verdict.
+- `src/app/api/investigate/route.ts`: streamed investigation events.
 
-Overrides: `NEBIUS_MODEL`, `NEBIUS_BASE_URL`. A regional host such as `https://api.tokenfactory.us-central1.nebius.com/v1` can be set if you need one. The default is the global host from the Token Factory introduction.
+Set `INCIDENT_PROVIDER=sarvam` to pin the provider. Otherwise a Sarvam key takes
+priority, with the original Nebius integration retained for existing deployments
+that only have `NEBIUS_API_KEY`. There is no provider fallback after an error.
+`SARVAM_MODEL` optionally overrides the default model. A 402 is shown as a credit
+error, never replaced by a replay. See [Paytm integration notes](docs/paytm-sarvam.md).
 
-If `NEBIUS_API_KEY` is missing and the client asks for live mode, the loop returns an error that names the variable, the model id, and the chat completions URL. It does not call the network and it does not fall through into the recorded trace. Replay is a separate, labeled mode.
+## Hackathon handoff
 
-Reasoning text from `message.reasoning_content` or `message.reasoning` is shown in the Planner card and stored as a `planner` context snapshot. The final answer is parsed for a JSON verdict (`severity`, `likely_cause`, `evidence_ids`, `recommended_action`, `confidence`, `summary`).
+- [Public replay demo](https://mangeshraut712.github.io/agent-console/)
+- [Paytm pitch PDF](docs/paytm-pitch.pdf) · [Editable PowerPoint](docs/paytm-pitch.pptx)
+- [Three-minute demo script](docs/demo-script.md) · [Sarvam integration notes](docs/paytm-sarvam.md)
+
+`npm run verify:desk` rehearses all three incidents on desktop and mobile using
+installed Chrome, and never makes a live model request. Set APP_URL and
+EVIDENCE_DIR to check another build. The public Pages demo is static replay;
+server-side Sarvam calls require running the app locally or on a server.
 
 ## Setup
 
@@ -49,51 +57,44 @@ Node.js 20+ and npm 10+.
 
 ```bash
 npm run setup
-cp .env.example .env.local   # optional; leave the keys blank for replay
 npm run dev
 ```
 
 Open http://localhost:3000. Leave the source on **Replay**, then open one of the three incidents: checkout latency, login 500s, or queue lag. The banner says Replay. The scorecard fills in when the trace finishes.
 
-### Live Nemotron
+### Live Sarvam
 
-```bash
-export NEBIUS_API_KEY=...          # server only, never NEXT_PUBLIC_
-export TAVILY_API_KEY=...          # optional, enables web_search
-npm run dev
-```
-
-The Live Nemotron control enables when `/api/health` reports `nebiusConfigured: true`. Switch to it and run an incident. The banner says Live. Internal tools still read the Northwind seed.
-
-Hackathon credits, if you still need a key, are described under [Participant credits](#participant-credits).
+For a fresh clone, copy `.env.example` to `.env.local`, fill `SARVAM_API_KEY`, and
+keep `INCIDENT_PROVIDER=sarvam`. Optional `TAVILY_API_KEY` enables public web search.
+Never prefix secret keys with `NEXT_PUBLIC_`.
 
 ### One-command deploy
 
 Docker Compose builds the Next.js app and the mock protocol server:
 
 ```bash
-export NEBIUS_API_KEY=...     # optional
+export SARVAM_API_KEY=...     # optional
 export TAVILY_API_KEY=...     # optional
 npm run deploy                # docker compose up --build -d
 ```
 
 The desk is at http://localhost:3000. `npm run stack` is the same compose file in the foreground.
 
-Vercel can host the same Next.js app (`vercel.json` sets the investigate route to 60 seconds). A multi-step Nemotron run can exceed the hobby timeout, so Docker is the path that does not depend on that limit. Set `NEBIUS_API_KEY` and `TAVILY_API_KEY` in the host environment. They are read at request time by the route handlers.
+Vercel can host the same Next.js app (`vercel.json` sets the investigate route to 60 seconds). A multi-step model run can exceed the hobby timeout, so Docker is the path that does not depend on that limit. Set `INCIDENT_PROVIDER=sarvam`, `SARVAM_API_KEY`, and optionally `TAVILY_API_KEY` in the host environment. They are read at request time by the route handlers.
 
-The GitHub Pages build (`npm run build:pages`) is a static export. It stashes the API routes, ships the labeled in-browser replay, and does not call Nemotron.
+The GitHub Pages build (`npm run build:pages`) is a static export. It stashes the API routes, ships the labeled in-browser replay, and does not call any model.
 
-## What changed since Aug 26, 2026
+## Investigation features
 
 The repo before this work was a WebSocket debug console with canned agent scripts. This update turns it into an investigation product:
 
-- Nemotron on Nebius Token Factory is the planner for a real incident loop, not a caption on the old mock.
+- Sarvam AI plans the live incident loop; Nebius remains an optional provider.
 - Four tools: service health, log search, runbook, and Tavily web search. Tool results go back into the next model call.
-- A recorded replay for three seeded incidents, labeled in the UI, the context snapshot, and the tool payload. Replay never calls Nebius or Tavily.
+- A recorded replay for three seeded incidents, labeled in the UI, the context snapshot, and the tool payload. Replay never calls a model or Tavily.
 - A scorecard that checks required tools, cause keywords, evidence ids, a recommended action, the service catalog, and the tool-call budget.
 - Planner and verdict panels on top of the existing trace timeline and context diff.
 - `POST /api/investigate` and `GET /api/health`, plus `npm run deploy` for Docker and a Vercel function timeout for the same route.
-- Tests for the Nebius client and the agent loop using a mock `fetch`.
+- Tests for the Sarvam and Nebius clients and the agent loop using a mock `fetch`.
 
 The protocol console, reorder buffer, and `agent-server` chaos checks are still there.
 
@@ -105,7 +106,10 @@ The protocol console, reorder buffer, and `agent-server` chaos checks are still 
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `NEBIUS_API_KEY` | Live mode only | Bearer token for Token Factory. Server-side. |
+| `SARVAM_API_KEY` | Live Sarvam only | Server-side Sarvam subscription key. Never public. |
+| `SARVAM_MODEL` | No | Defaults to `sarvam-105b-conversations` |
+| `INCIDENT_PROVIDER` | No | `sarvam` or `nebius`; selects the live provider |
+| `NEBIUS_API_KEY` | Live Nebius only | Bearer token for Token Factory. Server-side. |
 | `NEBIUS_BASE_URL` | No | Defaults to `https://api.tokenfactory.nebius.com/v1` |
 | `NEBIUS_MODEL` | No | Defaults to `nvidia/nemotron-3-super-120b-a12b` |
 | `TAVILY_API_KEY` | No | Enables the live `web_search` tool |
@@ -126,6 +130,11 @@ See [.env.example](.env.example).
 | `npm run verify:server` | Protocol check against the mock server |
 | `npm run verify:chaos` | Reordering, duplicates, disconnects |
 | `npm run build:pages` | Static export with in-browser replay |
+
+For protocol verification, use a normal mock server for `verify:server`. Stop it
+and restart with `npm start --prefix agent-server -- --mode chaos` before running
+`verify:chaos`. The verifier rejects mode mismatches and exits nonzero if any
+scenario fails, even when subsequent scenarios pass.
 
 ## Protocol console
 

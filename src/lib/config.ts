@@ -1,7 +1,7 @@
 /** In-browser mock agent used when a live WebSocket server is unavailable (GitHub Pages). */
 export const DEMO_WS_URL = "demo://agent";
 
-/** Incident Desk transport. Replay or live Nemotron, over the same protocol events. */
+/** Incident Desk transport. Replay or live AI investigations, over the same protocol events. */
 export const DESK_ENDPOINT = "desk://incident";
 
 export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";

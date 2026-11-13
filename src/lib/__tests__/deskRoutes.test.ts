@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { GET } from "@/app/api/health/route";
 import { POST } from "@/app/api/investigate/route";
-import { DEFAULT_NEMOTRON_MODEL } from "@/agent/constants";
+import { DEFAULT_SARVAM_MODEL } from "@/agent/constants";
 import { MAX_INVESTIGATION_CHARS, resetInvestigationRateLimit } from "@/agent/requestGuard";
 
 const originalFetch = globalThis.fetch;
-const ENV_KEYS = ["NEBIUS_API_KEY", "NEBIUS_BASE_URL", "NEBIUS_MODEL", "TAVILY_API_KEY"] as const;
+const ENV_KEYS = ["NEBIUS_API_KEY", "NEBIUS_BASE_URL", "NEBIUS_MODEL", "TAVILY_API_KEY", "SARVAM_API_KEY", "SARVAM_MODEL", "INCIDENT_PROVIDER"] as const;
 const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 
 function restoreEnv(): void {
@@ -35,6 +35,10 @@ function investigate(content: unknown, signal?: AbortSignal): Promise<Response> 
   );
 }
 
+beforeEach(() => {
+  for (const key of ENV_KEYS) delete process.env[key];
+});
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
   restoreEnv();
@@ -48,7 +52,7 @@ describe("incident desk HTTP routes", () => {
     const missing = (await (await GET()).json()) as Record<string, unknown>;
     expect(missing.nebiusConfigured).toBe(false);
     expect(missing.tavilyConfigured).toBe(false);
-    expect(missing.model).toBe(DEFAULT_NEMOTRON_MODEL);
+    expect(missing.model).toBe(DEFAULT_SARVAM_MODEL);
 
     process.env.NEBIUS_API_KEY = "live-key";
     process.env.TAVILY_API_KEY = "tvly-test";
@@ -145,7 +149,7 @@ describe("incident desk HTTP routes", () => {
     }) as typeof fetch;
     const missingKey = await readMessages(await investigate("incident:checkout-latency\nmode:live\ncheckout is slow"));
     expect(calls).toBe(0);
-    expect(missingKey.find((message) => message.type === "ERROR")).toMatchObject({ code: "MISSING_NEBIUS_API_KEY" });
+    expect(missingKey.find((message) => message.type === "ERROR")).toMatchObject({ code: "MISSING_SARVAM_API_KEY" });
 
     process.env.NEBIUS_API_KEY = "live-key";
     const httpError = await readMessages(await investigate("incident:checkout-latency\nmode:live\ncheckout is slow"));

@@ -1,7 +1,7 @@
 {
   "name": "agent-console",
   "version": "1.2.1",
-  "description": "Incident Desk — Nemotron plans on-call investigations, with a live trace and a seeded replay",
+  "description": "Incident Desk \u2014 Sarvam AI on-call investigations, evidence traces and labeled replay",
   "type": "module",
   "license": "MIT",
   "author": "Mangesh Raut",
@@ -29,7 +29,8 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "stack": "docker compose up --build",
-    "stack:down": "docker compose down"
+    "stack:down": "docker compose down",
+    "verify:desk": "node scripts/verify-desk.mjs"
   },
   "dependencies": {
     "next": "16.4.3",

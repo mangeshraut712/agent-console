@@ -4,11 +4,13 @@ Guidance for coding agents working in this repo.
 
 ## What this is
 
-Incident Desk is the product: an on-call investigation UI where NVIDIA Nemotron
-(`nvidia/nemotron-3-super-120b-a12b` by default) plans through Nebius Token Factory.
-The agent loop, client, seeded replay, and scorecard live in `src/agent/`. The HTTP entry
-is `src/app/api/investigate/route.ts`. Without `NEBIUS_API_KEY` the desk plays a labeled
-replay and must not present that trace as a live model response.
+Incident Desk is an on-call investigation UI. The Paytm integration uses Sarvam AI
+(`sarvam-105b-conversations`) through the server-side V1 chat completions API.
+`INCIDENT_PROVIDER` pins sarvam or nebius; absent that, a Sarvam key takes priority.
+The original Nebius client remains supported. The loop and replay live in `src/agent/`.
+The HTTP entry is `src/app/api/investigate/route.ts`. Replay is explicitly labeled
+and makes no model call. Live provider errors must never silently fall back to replay.
+Keys stay server-side, including `SARVAM_API_KEY` and optional `TAVILY_API_KEY`.
 
 The same repo still has the real-time debug UI for agent backends over WebSocket: streaming
 tokens, tool-call cards, and a live protocol trace. `agent-server/` is the mock backend used
@@ -34,6 +36,10 @@ npm run test               # vitest
 npm run verify:server      # protocol conformance against the running mock server
 npm run verify:chaos       # chaos mode: reordering, duplicates, disconnects
 ```
+
+Run `verify:server` against a normal server. Before `verify:chaos`, stop it and
+restart with `npm start --prefix agent-server -- --mode chaos`; the verifier
+rejects a mode mismatch. Custom ports use WS_URL, LOG_URL, RESET_URL and HEALTH_URL.
 
 Static demo build for GitHub Pages: `npm run build:pages` (uses `demo://agent`, no server).
 

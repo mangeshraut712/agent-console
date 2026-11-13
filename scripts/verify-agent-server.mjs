@@ -8,11 +8,14 @@
  *   node scripts/verify-agent-server.mjs --mode chaos   # chaos mode
  */
 
+import { WebSocket } from "ws";
+
 const WS_URL = process.env.WS_URL ?? "ws://localhost:4747/ws";
 const LOG_URL = process.env.LOG_URL ?? "http://localhost:4747/log";
 const RESET_URL = process.env.RESET_URL ?? "http://localhost:4747/reset";
 const HEALTH_URL = process.env.HEALTH_URL ?? "http://localhost:4747/health";
 const MODE = process.argv.includes("--mode") && process.argv.includes("chaos") ? "chaos" : "normal";
+const SESSION_TIMEOUT_MS = Number(process.env.VERIFY_TIMEOUT_MS ?? 90_000);
 const MAX_RECONNECTS = MODE === "chaos" ? 10 : 0;
 
 class ReorderBuffer {
@@ -63,7 +66,8 @@ async function fetchJson(url) {
 }
 
 async function runSession(label, userMessage) {
-  await fetch(RESET_URL, { method: "POST" }).catch(() => {});
+  const reset = await fetch(RESET_URL, { method: "POST" });
+  if (!reset.ok) throw new Error(`Reset failed (${reset.status})`);
 
   const reorderBuf = new ReorderBuffer();
   let processedSeq = 0;
@@ -74,10 +78,12 @@ async function runSession(label, userMessage) {
   let userMessageSent = false;
   let done = false;
   let ws = null;
+  let timeoutHandle;
 
   const finish = (result) => {
     if (done) return;
     done = true;
+    clearTimeout(timeoutHandle);
     try {
       ws?.close();
     } catch {
@@ -94,8 +100,10 @@ async function runSession(label, userMessage) {
         tokenText += m.text;
         break;
       case "TOOL_CALL":
-        send({ type: "TOOL_ACK", call_id: m.call_id });
-        toolAcks.add(m.call_id);
+        if (!toolAcks.has(m.call_id)) {
+          send({ type: "TOOL_ACK", call_id: m.call_id });
+          toolAcks.add(m.call_id);
+        }
         break;
       case "STREAM_END":
         streamEnded = true;
@@ -109,8 +117,7 @@ async function runSession(label, userMessage) {
       ws = new WebSocket(WS_URL);
 
       ws.addEventListener("open", () => {
-        reconnectAttempts = 0;
-        if (processedSeq > 0) {
+        if (userMessageSent) {
           ws.send(JSON.stringify({ type: "RESUME", last_seq: processedSeq }));
         } else if (!userMessageSent) {
           ws.send(JSON.stringify({ type: "USER_MESSAGE", content: userMessage }));
@@ -152,7 +159,7 @@ async function runSession(label, userMessage) {
           reconnectAttempts++;
           const delay = Math.min(500 * Math.pow(2, reconnectAttempts - 1), 10_000);
           await sleep(delay);
-          connect().then(resolve).catch(reject);
+          if (!done) connect().then(resolve).catch(reject);
         } else {
           reject(new Error(`${label}: connection closed before STREAM_END (${reconnectAttempts} reconnects)`));
         }
@@ -163,12 +170,16 @@ async function runSession(label, userMessage) {
       });
     });
 
-  const timeout = sleep(90_000).then(() => {
-    finish(null);
-    throw new Error(`${label}: timed out waiting for STREAM_END`);
+  const timeout = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      finish(null);
+      reject(new Error(`${label}: timed out waiting for STREAM_END (processed seq=${processedSeq})`));
+    }, SESSION_TIMEOUT_MS);
   });
 
-  return Promise.race([connect(), timeout]);
+  try { return await Promise.race([connect(), timeout]); }
+  finally { finish(null); }
+
 }
 
 async function main() {
@@ -176,9 +187,10 @@ async function main() {
 
   try {
     const health = await fetchJson(HEALTH_URL);
-    console.log(`✓ Server healthy — mode: ${health.mode ?? "unknown"}`);
-  } catch {
-    console.error(`✗ Cannot reach agent server at ${HEALTH_URL}`);
+    if (health.mode !== MODE) throw new Error(`Expected ${MODE} server, received ${health.mode}.`);
+    console.log(`✓ Server healthy — mode: ${health.mode}`);
+  } catch (error) {
+    console.error(`✗ Health check failed at ${HEALTH_URL}: ${error.message}`);
     console.error(`  Start it with: cd agent-server && npm start${MODE === "chaos" ? " -- --mode chaos" : ""}`);
     process.exit(1);
   }
@@ -192,29 +204,34 @@ async function main() {
     scenarios.push({ label: "Multi-tool analysis", message: "Analyze and compare the data" });
   }
 
+  let failures = 0;
+  const logs = [];
   for (const { label, message } of scenarios) {
     process.stdout.write(`  Running: ${label}... `);
     try {
       const result = await runSession(label, message);
       console.log(`✓ (${result.tokenText.length} chars, ${result.toolAcks.length} TOOL_ACKs, seq=${result.processedSeq})`);
     } catch (err) {
+      failures++;
       console.log(`✗ ${err.message}`);
     }
+    // Capture each scenario before the next /reset clears its log.
+    logs.push(...await fetchJson(LOG_URL));
     await sleep(300);
   }
 
-  const log = await fetchJson(LOG_URL);
+  const log = logs;
   const violations = log.filter((e) => e.verdict === "violation");
   const errors = log.filter((e) => e.verdict === "error");
 
   console.log(`\n📋 Server log: ${log.length} entries`);
 
-  if (violations.length === 0 && errors.length === 0) {
+  if (failures === 0 && violations.length === 0 && errors.length === 0) {
     console.log("✓ No protocol violations or errors\n");
     process.exit(0);
   }
 
-  console.log(`✗ ${violations.length} violation(s), ${errors.length} error(s):\n`);
+  console.log(`✗ ${failures} failed scenario(s), ${violations.length} violation(s), ${errors.length} error(s):\n`);
   for (const v of [...violations, ...errors]) {
     console.log(`  - [${v.verdict}] ${v.type ?? v.event ?? JSON.stringify(v)}`);
   }

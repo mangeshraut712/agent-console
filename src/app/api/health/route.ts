@@ -1,9 +1,9 @@
-import { nebiusStatus } from "@/agent/nebius";
+import { providerStatus } from "@/agent/provider";
 import { serverEnv } from "@/agent/investigate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return Response.json(nebiusStatus(serverEnv()));
+  return Response.json(providerStatus(serverEnv()));
 }

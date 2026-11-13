@@ -13,4 +13,8 @@ export const DEFAULT_NEMOTRON_MODEL = "nvidia/nemotron-3-super-120b-a12b";
 export const NEBIUS_PROVIDER = "Nebius Token Factory";
 
 export const REPLAY_DISCLAIMER =
-  "Recorded trace. Nemotron was not called. Tool results come from the Northwind seed shipped with this repo.";
+  "Recorded trace. No AI model was called. Tool results come from the Northwind seed shipped with this repo.";
+
+export const DEFAULT_SARVAM_MODEL = "sarvam-105b-conversations";
+export const SARVAM_BASE_URL = "https://api.sarvam.ai/v1";
+export const SARVAM_PROVIDER = "Sarvam AI";

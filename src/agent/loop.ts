@@ -1,16 +1,14 @@
-import { NEBIUS_PROVIDER } from "./constants";
+import { createProviderCompletion, resolveProviderConfig, ProviderConfigError, type ProviderConfig } from "./provider";
+import { SarvamError } from "./sarvam";
 import { getIncident, unknownIncidentMessage, type Incident } from "./incidents";
 import {
   InvalidNebiusBaseUrlError,
   MissingNebiusApiKeyError,
   NebiusHttpError,
   NebiusTimeoutError,
-  createChatCompletion,
-  resolveNebiusConfig,
   type ChatMessage,
   type Env,
   type NebiusCompletion,
-  type NebiusConfig,
 } from "./nebius";
 import { chunkText, extractVerdict } from "./text";
 import { executeTool, INCIDENT_TOOL_DEFS } from "./tools";
@@ -29,11 +27,11 @@ export async function* runLiveInvestigation(
   request: InvestigationRequest,
   deps: InvestigateDeps,
 ): AsyncGenerator<AgentStep> {
-  let config: NebiusConfig;
+  let config: ProviderConfig;
   try {
-    config = resolveNebiusConfig(deps.env);
+    config = resolveProviderConfig(deps.env);
   } catch (error) {
-    if (error instanceof MissingNebiusApiKeyError || error instanceof InvalidNebiusBaseUrlError) {
+    if (error instanceof MissingNebiusApiKeyError || error instanceof InvalidNebiusBaseUrlError || error instanceof SarvamError || error instanceof ProviderConfigError) {
       yield { kind: "error", code: error.code, message: error.message };
       return;
     }
@@ -49,7 +47,7 @@ export async function* runLiveInvestigation(
   const fetchImpl = deps.fetchImpl ?? fetch;
   const maxCalls = deps.maxModelCalls ?? DEFAULT_MAX_MODEL_CALLS;
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(incident) },
+    { role: "system", content: systemPrompt(incident, config) },
     { role: "user", content: request.alert || incident.alert },
   ];
   const usage = { promptTokens: 0, completionTokens: 0, reasoningTokens: 0 };
@@ -69,14 +67,14 @@ export async function* runLiveInvestigation(
       mode: "live",
       model: config.model,
       base_url: config.baseUrl,
-      provider: NEBIUS_PROVIDER,
+      provider: config.provider,
     },
   };
 
   for (let call = 1; call <= maxCalls; call += 1) {
     let completion: NebiusCompletion;
     try {
-      completion = await createChatCompletion(
+      completion = await createProviderCompletion(
         config,
         {
           messages,
@@ -103,8 +101,8 @@ export async function* runLiveInvestigation(
       contextId: "planner",
       data: {
         mode: "live",
-        source: "nebius-token-factory",
-        provider: NEBIUS_PROVIDER,
+        source: config.source,
+        provider: config.provider,
         model: completion.model || config.model,
         base_url: config.baseUrl,
         step: call,
@@ -151,7 +149,7 @@ export async function* runLiveInvestigation(
       yield {
         kind: "error",
         code: "EMPTY_MODEL_RESPONSE",
-        message: "Nemotron returned no tool call and no answer.",
+        message: `${config.provider} returned no tool call and no answer.`,
       };
     }
     yield runSnapshot(incident.id, config, usage, toolNames);
@@ -166,10 +164,10 @@ export async function* runLiveInvestigation(
   yield runSnapshot(incident.id, config, usage, toolNames);
 }
 
-function systemPrompt(incident: Incident): string {
+function systemPrompt(incident: Incident, config: ProviderConfig): string {
   return [
     "You are the on-call investigator for Northwind, a checkout platform.",
-    "You are running as NVIDIA Nemotron through Nebius Token Factory. You plan the investigation and you decide which tools to call.",
+    `You are running as ${config.model} through ${config.provider}. You plan the investigation and you decide which tools to call.`,
     "The telemetry tools read a seeded incident, not a live production account. Say that when you cite numbers.",
     "Do not invent metrics, log lines, or evidence ids. Every factual claim about this incident must come from a tool result.",
     `Incident id: ${incident.id}`,
@@ -220,7 +218,7 @@ async function runTool(
 }
 
 function modelError(error: unknown): AgentStep {
-  if (error instanceof NebiusHttpError || error instanceof NebiusTimeoutError) {
+  if (error instanceof NebiusHttpError || error instanceof NebiusTimeoutError || error instanceof SarvamError) {
     return { kind: "error", code: error.code, message: error.message };
   }
   if (error instanceof Error) {
@@ -231,7 +229,7 @@ function modelError(error: unknown): AgentStep {
 
 function runSnapshot(
   incidentId: string,
-  config: NebiusConfig,
+  config: ProviderConfig,
   usage: { promptTokens: number; completionTokens: number; reasoningTokens: number },
   toolNames: string[],
 ): AgentStep {
@@ -240,9 +238,9 @@ function runSnapshot(
     contextId: "run",
     data: {
       mode: "live",
-      source: "nebius-token-factory",
+      source: config.source,
       incident_id: incidentId,
-      provider: NEBIUS_PROVIDER,
+      provider: config.provider,
       model: config.model,
       base_url: config.baseUrl,
       tool_names: toolNames,

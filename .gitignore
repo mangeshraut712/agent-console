@@ -13,8 +13,8 @@ dist/
 
 # Environment
 .env
-.env.local
-.env.production.local
+.env.*
+!.env.example
 
 # IDE
 .vscode/

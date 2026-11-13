@@ -96,3 +96,21 @@ In this case:
 - The client processes the result normally.
 
 The race condition means a client can be protocol-compliant in intent (it did acknowledge) but still get flagged for a violation (the ACK arrived late). The mitigation is to send `TOOL_ACK` *immediately* when the tool call is received (not when it's rendered), using a `setTimeout(0)` or similar to defer the render but send the ACK synchronously. However, the assignment spec says "when the client has rendered a tool call card", so the client must render first. This tension is inherent in the protocol.
+## Mock server continuation after transport loss
+
+A socket drop must not terminate an unfinished script. Replaying only the prefix
+leaves clients waiting for a STREAM_END that was never generated. The mock server
+now pauses the existing script until a replacement socket sends RESUME, replays
+history after last_seq, and then continues the same script and stream ID. The
+client can resume from zero if the first frame was lost. Waiting for reconnection
+is abortable by a new turn or reset, and bounded to 90 seconds.
+
+Tool ACK tracking is installed before delivery (including replay), with its
+five-second timeout armed after delivery. This accepts an immediate ACK without
+charging injected latency against the client. Sequence ordering and deduplication
+remain in the client's ReorderBuffer. A reset/new turn aborts old work; an old
+script's finally block cannot clear the new script's controller.
+
+The verifier requires the requested server mode, retains logs before each reset,
+and exits nonzero for any failed scenario, including a timeout. Successful later
+scenarios can no longer hide an earlier failure.
