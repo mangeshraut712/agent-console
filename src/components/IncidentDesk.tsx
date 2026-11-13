@@ -123,7 +123,12 @@ export function IncidentDesk({ onOpenConsole }: { onOpenConsole: () => void }) {
     <main className="shell">
       <section className="hero card">
         <div>
-          <p className="eyebrow">Paytm Build for India · {provider}</p>
+          <div className="brandLine" aria-label={`Paytm Build for India · ${provider}`}>
+            <span className="brandName brandSarvam">{provider}</span>
+            <span className="brandDivider" aria-hidden="true" />
+            <span className="brandName brandPaytm">Paytm</span>
+            <span className="eyebrow">Build for India · Hackathon project</span>
+          </div>
           <h1>Incident Desk</h1>
           <p className="lede">
             An operator opens an alert, and the AI plans the investigation: which service to
