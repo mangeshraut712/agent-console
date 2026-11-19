@@ -179,4 +179,33 @@ describe("DeskAgentManager", () => {
       message: "network down",
     });
   });
+
+  test("a failure after frames were emitted continues the sequence and ends the stream", async () => {
+    const encoder = new TextEncoder();
+    const token = JSON.stringify({ type: "TOKEN", seq: 1, stream_id: "s1", text: "Looking" });
+    let sent = false;
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (!sent) {
+              sent = true;
+              controller.enqueue(encoder.encode(`${token}\n`));
+              return;
+            }
+            controller.error(new Error("connection reset"));
+          },
+        }),
+      )) as typeof fetch;
+    const agent = new DeskAgentManager();
+    const events = attach(agent);
+    agent.connect();
+    agent.send({ type: "USER_MESSAGE", content: "checkout is slow" });
+    await settle(events);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const seen = messages(events);
+    expect(seen.map((message) => message.seq)).toEqual([1, 2, 3]);
+    expect(seen[1]).toMatchObject({ type: "ERROR", code: "DESK_FAILED", message: "connection reset" });
+    expect(seen[2]).toMatchObject({ type: "STREAM_END", stream_id: "s1" });
+  });
 });

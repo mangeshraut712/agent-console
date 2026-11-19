@@ -103,11 +103,22 @@ export class DeskAgentManager {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      // The failure can come after some frames were already emitted (for
+      // example a dropped connection mid-body). Continue the sequence so the
+      // client's reorder buffer does not drop the error as a duplicate, and
+      // end the open stream so its bubble stops showing as in progress.
+      const lastSeq = this.eventHistory.reduce((max, item) => Math.max(max, item.seq), 0);
+      const open = [...this.eventHistory].reverse().find((item) => "stream_id" in item);
       this.pushMessage({
         type: "ERROR",
-        seq: 1,
+        seq: lastSeq + 1,
         code: "DESK_FAILED",
         message: error instanceof Error ? error.message : "Investigation failed.",
+      });
+      this.pushMessage({
+        type: "STREAM_END",
+        seq: lastSeq + 2,
+        stream_id: open && "stream_id" in open ? open.stream_id : "desk_error",
       });
     } finally {
       if (this.streamAbort === abort) this.streamAbort = null;
