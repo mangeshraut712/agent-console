@@ -208,4 +208,19 @@ describe("DeskAgentManager", () => {
     expect(seen[1]).toMatchObject({ type: "ERROR", code: "DESK_FAILED", message: "connection reset" });
     expect(seen[2]).toMatchObject({ type: "STREAM_END", stream_id: "s1" });
   });
+
+  test("a body that ends cleanly without STREAM_END still ends the stream with an error", async () => {
+    const token = JSON.stringify({ type: "TOKEN", seq: 1, stream_id: "s1", text: "Looking" });
+    globalThis.fetch = (async () => new Response(`${token}\n`)) as typeof fetch;
+    const agent = new DeskAgentManager();
+    const events = attach(agent);
+    agent.connect();
+    agent.send({ type: "USER_MESSAGE", content: "checkout is slow" });
+    await settle(events);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const seen = messages(events);
+    expect(seen.map((message) => message.seq)).toEqual([1, 2, 3]);
+    expect(seen[1]).toMatchObject({ type: "ERROR", code: "DESK_FAILED" });
+    expect(seen[2]).toMatchObject({ type: "STREAM_END", stream_id: "s1" });
+  });
 });

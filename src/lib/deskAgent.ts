@@ -199,6 +199,11 @@ export class DeskAgentManager {
     }
     const tail = buffer.trim();
     if (tail && this.connected && !signal.aborted) await this.emitLine(tail);
+    // A body that closes cleanly before STREAM_END (e.g. a platform timeout)
+    // would leave the bubble streaming forever; end it like a dropped connection.
+    if (!signal.aborted && this.connected && !this.eventHistory.some((item) => item.type === "STREAM_END")) {
+      throw new Error("Investigation stream ended before it finished.");
+    }
   }
 
   private async emitLine(line: string): Promise<void> {
