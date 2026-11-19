@@ -27,6 +27,14 @@ describe("parseInvestigationContent", () => {
     expect(parseInvestigationContent("latency is elevated").incidentId).toBeNull();
   });
 
+  test("directives-only content leaves the alert empty instead of echoing the directives", () => {
+    expect(parseInvestigationContent("incident:checkout-latency\nmode:replay")).toEqual({
+      incidentId: "checkout-latency",
+      alert: "",
+      mode: "replay",
+    });
+  });
+
   test("resolveMode treats a blank key as replay", () => {
     expect(resolveMode("auto", { NEBIUS_API_KEY: "   " })).toBe("replay");
     expect(resolveMode("live", { NEBIUS_API_KEY: "   " })).toBe("live");

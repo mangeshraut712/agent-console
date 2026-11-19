@@ -29,7 +29,8 @@ export function parseInvestigationContent(content: string): ParsedInvestigation 
     alertLines.push(line);
   }
 
-  const alert = alertLines.join("\n").trim() || content.trim();
+  // Directive lines never become alert text; an empty alert falls back to the incident's own alert.
+  const alert = alertLines.join("\n").trim();
   if (!incidentId) incidentId = matchIncidentId(alert);
   return { incidentId, alert, mode };
 }
