@@ -338,7 +338,12 @@ export function useAgentConsole(endpoint?: string): AgentConsoleState & AgentCon
       reorderBufRef.current.reset(1);
       processedSeqRef.current = 0;
       ws.resetProcessedSeq();
-      currentStreamRef.current = null;
+      // A new turn replaces any stream still in flight; the old turn never
+      // gets its STREAM_END, so stop showing its bubble as streaming.
+      currentStreamRef.current = abandonUnconfirmedStream(
+        currentStreamRef.current,
+        messagesRef.current,
+      );
       resetToolAckRegistry();
 
       const userMsg: ConversationMessage = {
