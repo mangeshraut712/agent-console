@@ -15,7 +15,8 @@ export function isAllowedAgentOrigin(origin: string | undefined): boolean {
     return false;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  const host = url.hostname.toLowerCase();
+  // URL.hostname keeps IPv6 brackets ("[::1]"); LOCAL_HOSTS stores them bare.
+  const host = url.hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1");
   if (LOCAL_HOSTS.has(host)) return true;
   const extra = process.env.AGENT_SERVER_ALLOWED_ORIGINS;
   if (!extra) return false;
