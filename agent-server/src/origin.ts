@@ -1,4 +1,5 @@
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+// URL.hostname keeps IPv6 literals bracketed, so the loopback entry is "[::1]".
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
  * Browser pages on another site can open ws://localhost and read /log.
