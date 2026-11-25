@@ -38,4 +38,11 @@ describe("isAllowedAgentOrigin", () => {
     expect(isAllowedAgentOrigin("https://desk.example.com:8443")).toBe(false);
     expect(isAllowedAgentOrigin("http://desk.example.com")).toBe(false);
   });
+
+  it("matches hostname-only entries, including bracketed IPv6 hosts", () => {
+    process.env.AGENT_SERVER_ALLOWED_ORIGINS = "desk.internal,[fd00::5]";
+    expect(isAllowedAgentOrigin("http://desk.internal:3000")).toBe(true);
+    expect(isAllowedAgentOrigin("https://[fd00::5]:8443")).toBe(true);
+    expect(isAllowedAgentOrigin("http://[fd00::6]:8443")).toBe(false);
+  });
 });
