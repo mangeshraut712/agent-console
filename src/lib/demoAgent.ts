@@ -179,14 +179,19 @@ export class DemoAgentManager {
 
   private waitForAck(callId: string): Promise<void> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.pendingAcks.delete(callId);
-        resolve();
-      }, ACK_TIMEOUT_MS);
-      this.pendingAcks.set(callId, () => {
+      const onAck = () => {
         clearTimeout(timer);
         resolve();
-      });
+      };
+      const timer = setTimeout(() => {
+        // A retried turn reuses the same call_id, so only drop our own entry;
+        // otherwise a stale timeout swallows the new turn's TOOL_ACK.
+        if (this.pendingAcks.get(callId) === onAck) {
+          this.pendingAcks.delete(callId);
+        }
+        resolve();
+      }, ACK_TIMEOUT_MS);
+      this.pendingAcks.set(callId, onAck);
     });
   }
 
