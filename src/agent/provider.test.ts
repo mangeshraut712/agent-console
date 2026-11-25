@@ -10,8 +10,9 @@ function env(overrides: Partial<Env> = {}): Env {
 describe("selectedProvider", () => {
   it("falls back to sarvam when nothing usable is configured", () => {
     expect(selectedProvider(env())).toBe("sarvam");
-    // A blank key is not a configured key.
-    expect(selectedProvider(env({ SARVAM_API_KEY: "   " }))).toBe("sarvam");
+    // A blank key is not a configured key: with a real Nebius key present,
+    // a whitespace-only Sarvam key must not win the sniffing.
+    expect(selectedProvider(env({ SARVAM_API_KEY: "   ", NEBIUS_API_KEY: "n" }))).toBe("nebius");
   });
 
   it("honours an explicit INCIDENT_PROVIDER after trimming whitespace", () => {
